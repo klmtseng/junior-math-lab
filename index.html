@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>國中數感實驗室 Junior Math Lab — 國中數學互動練習</title>
+<meta name="description" content="7 關互動數學:負數數線、天平解方程、座標尋寶、比例放縮、質因數、分數乘法;各附語音示範與總測驗。">
+<meta property="og:title" content="國中數感實驗室 Junior Math Lab">
+<meta property="og:description" content="7 關互動國中數學:用拖動、點選直接感受數學直覺,附示範動畫、語音旁白與總測驗。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="og.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <button id="voice-btn" title="示範旁白語音開關">🔇</button>
+  <button id="theme-btn" title="切換深色 / 淺色">🌙</button>
+  <h1>國中數感實驗室 <span class="en">Junior Math Lab</span></h1>
+  <p class="subtitle">國中銜接 · 用互動拖動感受數學直覺<span id="overall"></span></p>
+  <nav id="subjects"></nav>
+  <nav id="tabs"></nav>
+</header>
+
+<main>
+  <section id="panel">
+    <div id="level-head">
+      <h2 id="lv-title"></h2>
+      <a id="lv-ep" href="#" target="_blank" rel="noopener"></a>
+      <button id="demo-btn">▶ 看示範</button>
+    </div>
+    <div id="cert"></div>
+    <div id="lv-intro"></div>
+    <details id="lv-formal"><summary>正式定義(想看數學語言再展開)</summary><div id="lv-formal-body"></div></details>
+    <div id="lv-goals"></div>
+    <div id="lv-controls"></div>
+  </section>
+  <section id="stage">
+    <div id="readout"></div>
+    <canvas id="board" width="680" height="680"></canvas>
+    <div id="caption"></div>
+  </section>
+</main>
+
+<footer>
+  <p>本站為愛好者自製的<b>非官方</b>國中數學互動練習,內容原創(<a href="https://github.com/klmtseng/junior-math-lab" target="_blank" rel="noopener">MIT 開源</a>)。靈感致敬 <a href="https://www.youtube.com/@JOHNSON-MATH" target="_blank" rel="noopener">JOHNSON-MATH 頻道</a>。</p>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>
