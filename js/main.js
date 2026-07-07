@@ -1,5 +1,5 @@
-/* 線代實驗室 LA Lab — 零依賴 Canvas 互動線性代數
-   8 關對應 JOHNSON-MATH 線性代數 EP1–EP3 */
+/* 國中數感實驗室 Junior Math Lab — 零依賴 Canvas 互動數學
+   國中銜接六關+總測驗,引擎抽自數感實驗室 */
 "use strict";
 
 /* ---------- 向量 / 矩陣工具 ---------- */
