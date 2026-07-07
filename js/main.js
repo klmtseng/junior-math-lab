@@ -270,14 +270,19 @@ const player = {
   playClip(st) {
     this.clipWaiting = false;
     if (!voiceOn || st.cap == null) return;
-    const a = getAudioEl();
-    a.src = `audio/${cur().id}_${this.idx}.mp3`;
-    this.clipWaiting = true;
+    const src = `audio/${cur().id}_${this.idx}.mp3`;
     const done = () => { this.clipWaiting = false; };
-    a.onended = done; a.onerror = done;
-    try { a.currentTime = 0; } catch (e) {}
-    const pr = a.play();
-    if (pr && pr.catch) pr.catch(done); // 自動播放被擋(無使用者手勢)→ 靜音續播
+    // 存在性豁免:先用 fetch HEAD 確認 mp3 存在再掛 Audio,避免 404 噴 console error
+    this.clipWaiting = true;
+    fetch(src, { method: "HEAD" }).then((res) => {
+      if (!res.ok) { done(); return; }
+      const a = getAudioEl();
+      a.src = src;
+      a.onended = done; a.onerror = done;
+      try { a.currentTime = 0; } catch (e) {}
+      const pr = a.play();
+      if (pr && pr.catch) pr.catch(done); // 自動播放被擋(無使用者手勢)→ 靜音續播
+    }).catch(done); // 網路錯誤 → 靜音續播
   },
   update() {
     if (!this.active) return;
@@ -787,7 +792,369 @@ function makeQuiz(id, name, pass, questions) {
     },
   };
 }
-JH_LEVELS.push(makeQuiz("JQ", "國中銜接", 5, [
+/* ─── J7:二元一次聯立方程式「交點獵人」 ─── */
+const J7 = {
+  id: "J7", short: "交點獵人", title: "關 7|聯立方程式:把點拖到兩條線的交點", ep: "J", subj: "jh",
+  intro: `<p>兩條直線各代表一個方程式。同時滿足兩個方程式的點,只有一個——就是兩條線的<b>交點</b>。</p><p>把黃點拖到兩條直線的交點;虛線輔助線會告訴你現在距離兩條線各多遠。</p>`,
+  formal: `<p class="math">二元一次聯立方程式:{ ax+by=c, dx+ey=f } 的解 = 兩直線在座標平面上的交點 (x, y)。</p>`,
+  goals: [
+    { id: "J7-a", text: "把點拖到聯立方程式 { y=x+1, y=−x+3 } 的交點" },
+    { id: "J7-b", text: "把點拖到聯立方程式 { y=2x−1, y=−x+5 } 的交點" },
+  ],
+  // 題組:兩直線以 slope-intercept 表示,交點事先算好
+  qs: [
+    { l1: { m: 1, b: 1 }, l2: { m: -1, b: 3 }, ans: V(1, 2),
+      label1: "y = x + 1", label2: "y = −x + 3" },
+    { l1: { m: 2, b: -1 }, l2: { m: -1, b: 5 }, ans: V(2, 3),
+      label1: "y = 2x − 1", label2: "y = −x + 5" },
+  ],
+  state: { pt: V(0, 0), stage: 0 },
+  enter() { this.state.pt = V(0, 0); this.state.stage = 0; },
+  demo() { const s = this.state; return [
+    { call: () => { s.stage = 0; s.pt = V(0, 0); }, cap: "一條方程式 = 一條直線,無限多個點都滿足它", dur: 2400 },
+    { cap: "兩條直線,各自有一整排解——但同時滿足兩條線的點只有一個", dur: 2600 },
+    { vec: [() => s.pt, (w) => s.pt = w, V(1, 2)], cap: "交點就是聯立方程式的解!y=x+1 和 y=−x+3 在 (1, 2) 相交", dur: 2800 },
+    { vec: [() => s.pt, (w) => s.pt = w, V(0, 0)], cap: "換你:把黃點拖到交點,感受「同時成立」的意義", dur: 2000 },
+  ]; },
+  draggables() {
+    const s = this.state;
+    return [{ get: () => s.pt, set: (w) => { s.pt = w; } }];
+  },
+  // 計算點到直線 y=mx+b 的距離
+  _distLine(p, line) { return Math.abs(p.y - (line.m * p.x + line.b)) / Math.sqrt(1 + line.m * line.m); },
+  draw() {
+    const s = this.state, q = this.qs[s.stage];
+    drawGrid(MI(), { original: false });
+    pText(toScr(V(4.6, 0)).x, toScr(V(4.6, 0)).y - 8, "x", TH.dim, 15);
+    pText(toScr(V(0, 4.6)).x + 8, toScr(V(0, 4.6)).y, "y", TH.dim, 15);
+    // 畫兩條直線
+    const drawLine = (line, color, label) => {
+      const x0 = -5.5, x1 = 5.5;
+      const p0 = toScr(V(x0, line.m * x0 + line.b)), p1 = toScr(V(x1, line.m * x1 + line.b));
+      g.strokeStyle = color; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(p0.x, p0.y); g.lineTo(p1.x, p1.y); g.stroke();
+      const mid = toScr(V(3.5, line.m * 3.5 + line.b));
+      pText(mid.x + 6, mid.y - 8, label, color, 13, "left", true);
+    };
+    drawLine(q.l1, "#ff5c7a", q.label1);
+    drawLine(q.l2, "#4ade80", q.label2);
+    // 交點標示(星)
+    drawStar(q.ans, COL.star);
+    // 使用者的點
+    const d1 = this._distLine(s.pt, q.l1), d2 = this._distLine(s.pt, q.l2);
+    const hit = d1 < 0.22 && d2 < 0.22;
+    drawDot(s.pt, hit ? "#4ade80" : "#ffd166", 9);
+    if (!hit) {
+      // 輔助:從點畫到最近直線的垂線(簡化為橫向虛線)
+      const yOnL1 = q.l1.m * s.pt.x + q.l1.b, yOnL2 = q.l2.m * s.pt.x + q.l2.b;
+      drawDash(s.pt, V(s.pt.x, yOnL1), "#ff5c7a");
+      drawDash(s.pt, V(s.pt.x, yOnL2), "#4ade80");
+    }
+    readout.innerHTML = hit
+      ? `<b style="color:#4ade80">找到交點 (${fmt(q.ans.x)}, ${fmt(q.ans.y)})!兩條方程式同時成立</b>`
+      : `你在 (${fmt(s.pt.x)}, ${fmt(s.pt.y)}) — 距線1: ${d1.toFixed(2)} 距線2: ${d2.toFixed(2)}`;
+    if (hit) {
+      if (s.stage === 0) { markGoal("J7-a"); if (progress["J7-a"] && !dragTarget && !player.active) { s.stage = 1; s.pt = V(0, 0); } }
+      else markGoal("J7-b");
+    }
+  },
+};
+
+/* ─── J8:一元一次不等式「數線塗色」 ─── */
+const J8 = {
+  id: "J8", short: "數線塗色", title: "關 8|不等式:在數線上塗出解集合", ep: "J", subj: "jh",
+  intro: `<p>方程式只有一個解;不等式的解是一整段。關鍵只有兩點:<b>端點怎麼確定</b>(移項/除以正數),以及<b>乘除負數要翻轉不等號方向</b>。</p><p>拖動橘色端點到正確位置,再點選開/閉圈切換;最後把正確的方向按鈕選好。</p>`,
+  formal: `<p class="math">解 ax + b &lt; c(a&ne;0):移項得 ax &lt; c−b;若 a &gt; 0 除出 x;若 a &lt; 0 除出 x 且不等號翻轉。</p>`,
+  goals: [
+    { id: "J8-a", text: "正確表示 x + 2 < 5 的解集合(開圈,向左)" },
+    { id: "J8-b", text: "正確表示 −2x ≤ 4 的解集合(閉圈,向右)" },
+  ],
+  qs: [
+    // ans: 端點值, closed: 是否閉圈, right: 箭頭向右(> / ≥)
+    { expr: "x + 2 < 5",  ans: 3, closed: false, right: false, note: "移項:x < 3,開圈向左" },
+    { expr: "−2x ≤ 4",  ans: -2, closed: true,  right: true,  note: "除以負數翻轉:x ≥ −2,閉圈向右" },
+  ],
+  state: { q: 0, ep: 3, closed: false, right: false },
+  nl() { const X = (v) => 80 + (v + 7) * 33; return { X, invX: (px) => (px - 80) / 33 - 7, Y: 340 }; },
+  enter() { this.loadQ(0); this._renderCtl && this._renderCtl(); },
+  loadQ(k) { const q = this.qs[k]; Object.assign(this.state, { q: k, ep: q.ans + 2, closed: false, right: false }); },
+  demo() { const s = this.state, lv = this; const R = () => lv._renderCtl && lv._renderCtl(); return [
+    { call: () => { lv.loadQ(0); R(); }, cap: "解 x + 2 < 5:兩邊減 2,得 x < 3", dur: 2600 },
+    { call: () => { s.ep = 3; s.closed = false; R(); }, cap: "3 本身不算在解裡——用空心圈(開圈)標記端點", dur: 2400 },
+    { call: () => { s.right = false; R(); }, cap: "x < 3 = 所有比 3 小的數,箭頭向左塗色", dur: 2400 },
+    { call: () => { lv.loadQ(1); R(); }, cap: "換題:−2x ≤ 4。注意除以負數要翻轉不等號方向!", dur: 2400 },
+    { call: () => { s.ep = -2; s.closed = true; s.right = true; R(); }, cap: "x ≥ −2:等號成立用閉圈,≥ 所以箭頭向右——換你試試!", dur: 2400 },
+  ]; },
+  controls(el) {
+    const s = this.state, lv = this;
+    const render = () => {
+      el.innerHTML = `
+        <div class="row quiz-msg">題目:<b>${lv.qs[s.q].expr}</b></div>
+        <div class="row">
+          <button id="j8tog">端點:${s.closed ? "● 閉圈(≤ / ≥)" : "○ 開圈(< / >)"}</button>
+          <button id="j8dir">方向:${s.right ? "向右 →(> / ≥)" : "← 向左(< / ≤)"}</button>
+        </div>
+        <div class="row"><button class="primary" id="j8nxt" style="display:${lv._isCorrect() && s.q === 0 ? "" : "none"}">下一題:−2x ≤ 4</button></div>`;
+      el.querySelector("#j8tog").onclick = () => { s.closed = !s.closed; render(); };
+      el.querySelector("#j8dir").onclick = () => { s.right = !s.right; render(); };
+      el.querySelector("#j8nxt") && (el.querySelector("#j8nxt").onclick = () => { lv.loadQ(1); render(); });
+    };
+    this._renderCtl = render;
+    render();
+  },
+  _isCorrect() {
+    const s = this.state, q = this.qs[s.q];
+    return Math.abs(s.ep - q.ans) < 0.4 && s.closed === q.closed && s.right === q.right;
+  },
+  draggables() {
+    const s = this.state, m = this.nl();
+    return [{
+      getScreen: () => ({ x: m.X(s.ep), y: m.Y }),
+      setScreen: (px) => { s.ep = Math.max(-7, Math.min(7, Math.round(m.invX(px)))); },
+    }];
+  },
+  draw() {
+    const s = this.state, q = this.qs[s.q], m = this.nl();
+    // 數線
+    g.strokeStyle = TH.axis; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(m.X(-7), m.Y); g.lineTo(m.X(7), m.Y); g.stroke();
+    for (let k = -7; k <= 7; k++) {
+      const px = m.X(k), zero = k === 0;
+      g.strokeStyle = zero ? "#ffd166" : TH.axis; g.lineWidth = zero ? 2.5 : 1.5;
+      g.beginPath(); g.moveTo(px, m.Y - (zero ? 13 : 7)); g.lineTo(px, m.Y + (zero ? 13 : 7)); g.stroke();
+      if (k % 2 === 0 || k === -1 || k === 1) pText(px, m.Y + 30, String(k), k < 0 ? "#38bdf8" : TH.dim, 13, "center", zero);
+    }
+    // 塗色區域
+    const epX = m.X(s.ep), arrowLen = 120;
+    const shade = s.right ? "rgba(74,222,128,.28)" : "rgba(56,189,248,.28)";
+    g.fillStyle = shade;
+    if (s.right) g.fillRect(epX, m.Y - 12, arrowLen, 24);
+    else g.fillRect(epX - arrowLen, m.Y - 12, arrowLen, 24);
+    // 端點
+    drawDisc(epX, m.Y, 11, s.closed ? "#ffd166" : TH.bg, "#ffd166", 2.5);
+    // 方向箭頭
+    const arrowColor = "#4ade80";
+    g.strokeStyle = arrowColor; g.lineWidth = 3.5;
+    g.beginPath();
+    if (s.right) { g.moveTo(epX, m.Y); g.lineTo(epX + arrowLen, m.Y); } else { g.moveTo(epX, m.Y); g.lineTo(epX - arrowLen, m.Y); }
+    g.stroke();
+    const ax = s.right ? epX + arrowLen : epX - arrowLen, adir = s.right ? 1 : -1;
+    g.fillStyle = arrowColor; g.beginPath(); g.moveTo(ax, m.Y); g.lineTo(ax - adir * 12, m.Y - 6); g.lineTo(ax - adir * 12, m.Y + 6); g.closePath(); g.fill();
+    pText(340, 210, `題目:${q.expr}`, TH.text, 26, "center", true);
+    const ok = this._isCorrect();
+    if (ok) pText(340, 260, `正確!${q.note}`, "#4ade80", 17, "center", true);
+    readout.innerHTML = `端點 ${s.ep}  ${s.closed ? "閉圈" : "開圈"}  ${s.right ? "向右" : "向左"}${ok ? "　<b style='color:#4ade80'>答對了!</b>" : ""}`;
+    if (ok) {
+      if (s.q === 0) { markGoal("J8-a"); if (progress["J8-a"] && !dragTarget && !player.active) { this.loadQ(1); this._renderCtl && this._renderCtl(); } }
+      else markGoal("J8-b");
+    }
+  },
+};
+
+/* ─── J9:統計圖表「數據偵探」 ─── */
+const J9 = {
+  id: "J9", short: "數據偵探", title: "關 9|統計:拖動數據,看平均數與長條圖即時變", ep: "J", subj: "jh",
+  intro: `<p>統計圖表不是靜止的——<b>每個資料點都影響平均數和長條高度</b>。把數據點拖上拖下,觀察平均線跟著移動,找出那個「跑太遠」的離群值。</p><p>完成兩個任務:把平均數拖到目標值,再找出離群值並消除它(拖到第 0 格)。</p>`,
+  formal: `<p class="math">算術平均數 = 各資料加總 ÷ 資料個數。離群值:距離平均數明顯偏高或偏低的資料點(直觀判斷)。</p>`,
+  goals: [
+    { id: "J9-a", text: "把 5 筆資料的平均數調整到恰好等於 6" },
+    { id: "J9-b", text: "找出離群值並把它歸零(使其不影響平均)" },
+  ],
+  // 5 個資料值,可拖;目標平均=6;第 3 筆初始為超大離群值
+  state: { vals: [5, 6, 7, 6, 5], outlierZeroed: false },
+  enter() { Object.assign(this.state, { vals: [5, 6, 7, 6, 5], outlierZeroed: false }); },
+  _mean() { const s = this.state; return s.vals.reduce((a, b) => a + b, 0) / s.vals.length; },
+  demo() { const s = this.state; return [
+    { call: () => { s.vals = [5, 6, 7, 6, 5]; }, cap: "這 5 條長條代表 5 個資料;紅線是平均數", dur: 2600 },
+    { cap: "把第 3 條拖高:你看,平均線也往上移了!每個值都影響平均", dur: 2600 },
+    { call: () => { s.vals = [5, 6, 14, 6, 5]; }, cap: "這一筆跑到 14——它叫離群值,讓平均嚴重偏高", dur: 2800 },
+    { call: () => { s.vals = [5, 6, 7, 6, 5]; }, cap: "去掉離群值(拖回 0),平均就正常了。換你操作!", dur: 2200 },
+  ]; },
+  draggables() {
+    const s = this.state;
+    return s.vals.map((_, k) => {
+      const BAR_X0 = 120, BAR_W = 60, BAR_Y0 = 440, SC = 26;
+      const bx = BAR_X0 + k * (BAR_W + 16) + BAR_W / 2;
+      return {
+        getScreen: () => ({ x: bx, y: BAR_Y0 - s.vals[k] * SC }),
+        setScreen: (px, py) => { s.vals[k] = Math.max(0, Math.min(15, Math.round((BAR_Y0 - py) / SC))); },
+      };
+    });
+  },
+  draw() {
+    const s = this.state;
+    const BAR_X0 = 120, BAR_W = 60, GAP = 16, BAR_Y0 = 440, SC = 26;
+    const mean = this._mean();
+    const targetMean = 6;
+    const meanOk = Math.abs(mean - targetMean) < 0.05;
+    // 長條
+    s.vals.forEach((v, k) => {
+      const bx = BAR_X0 + k * (BAR_W + GAP);
+      const isOutlier = v >= 12;
+      g.fillStyle = isOutlier ? "rgba(255,92,122,.55)" : "rgba(56,189,248,.55)";
+      if (v > 0) g.fillRect(bx, BAR_Y0 - v * SC, BAR_W, v * SC);
+      g.strokeStyle = isOutlier ? "#ff5c7a" : "#38bdf8"; g.lineWidth = 2;
+      g.strokeRect(bx, BAR_Y0 - v * SC, BAR_W, v * SC);
+      pText(bx + BAR_W / 2, BAR_Y0 - v * SC - 10, String(v), isOutlier ? "#ff5c7a" : TH.text, 15, "center", true);
+      pText(bx + BAR_W / 2, BAR_Y0 + 22, `D${k + 1}`, TH.dim, 13, "center");
+      // 拖動點
+      drawDisc(bx + BAR_W / 2, BAR_Y0 - v * SC, 9, "#ffd166", "#0a0e1a", 1.5);
+    });
+    // 平均線
+    const meanY = BAR_Y0 - mean * SC;
+    g.strokeStyle = meanOk ? "#4ade80" : "#fbbf24"; g.lineWidth = 2.5; g.setLineDash([8, 5]);
+    g.beginPath(); g.moveTo(BAR_X0 - 16, meanY); g.lineTo(BAR_X0 + 5 * (BAR_W + GAP), meanY); g.stroke();
+    g.setLineDash([]);
+    pText(BAR_X0 + 5 * (BAR_W + GAP) + 6, meanY + 5, `平均=${fmt(mean)}`, meanOk ? "#4ade80" : "#fbbf24", 14, "left", true);
+    // 目標線
+    const tgtY = BAR_Y0 - targetMean * SC;
+    g.strokeStyle = TH.dim; g.lineWidth = 1.5; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(BAR_X0 - 16, tgtY); g.lineTo(BAR_X0 + 5 * (BAR_W + GAP), tgtY); g.stroke();
+    g.setLineDash([]);
+    pText(BAR_X0 - 18, tgtY + 5, "目標 6", TH.dim, 13, "right");
+    pText(340, 120, "拖動黃點調整各筆資料", TH.text, 20, "center", true);
+    // 離群值偵測
+    const hasLarge = s.vals.some((v) => v >= 12);
+    if (meanOk) markGoal("J9-a");
+    if (!hasLarge && s.vals.reduce((a, b) => a + b, 0) > 0) markGoal("J9-b");
+    readout.innerHTML = `平均 <b>${fmt(mean)}</b>　目標 6${meanOk ? "　<b style='color:#4ade80'>平均達標!</b>" : ""}${hasLarge ? "　⚠ 有離群值(紅色)!把它拖到 0" : ""}`;
+  },
+};
+
+/* ─── J10:線對稱與三視圖「鏡子與積木」 ─── */
+const J10 = {
+  id: "J10", short: "鏡子與積木", title: "關 10|對稱與視圖:鏡子對折與積木三視圖", ep: "J", subj: "jh",
+  intro: `<p><b>線對稱</b>:把圖形沿一條直線對折,兩半完全重疊——那條線叫對稱軸。<b>三視圖</b>:從正面、側面、上方三個方向看同一個立體,各畫一張平面圖。</p><p>前半:拖對稱軸位置,找出哪個圖形有反射點落在軸上;後半:從三張視圖選出正確的積木堆。</p>`,
+  formal: `<p class="math">線對稱:P 與其鏡像 P' 的連線垂直平分對稱軸。三視圖(正視圖/側視圖/俯視圖)是立體幾何的「說明書」。</p>`,
+  goals: [
+    { id: "J10-a", text: "把對稱軸拖到正確位置,使兩個標記點關於軸對稱" },
+    { id: "J10-b", text: "選出符合三視圖的正確積木堆" },
+  ],
+  state: { axX: 0, view: "phase1", chosen: null },
+  // 對稱任務:左點 A=(-2,1), 右點 B=(2,1),正確軸=x=0
+  _A: V(-2, 1), _B: V(2, 1),
+  enter() { Object.assign(this.state, { axX: 0, view: "phase1", chosen: null }); this._renderCtl && this._renderCtl(); },
+  demo() { const s = this.state, lv = this; const R = () => lv._renderCtl && lv._renderCtl(); return [
+    { call: () => { s.view = "phase1"; s.axX = -2; R(); }, cap: "兩個標記點,對稱軸在它們的正中央——就是連線的垂直平分線", dur: 2800 },
+    { num: [() => s.axX, (v) => s.axX = v, 0], cap: "軸往中間滑過來……A 和 B 到軸的距離相等:這就是對稱", dur: 2600 },
+    { call: () => { s.view = "phase2"; R(); }, cap: "三視圖:同一個積木堆從三個方向看,各看到不同形狀", dur: 2800 },
+    { cap: "選出最符合這三張視圖的積木堆。換你了!", dur: 2000 },
+  ]; },
+  controls(el) {
+    const s = this.state, lv = this;
+    const render = () => {
+      if (s.view === "phase1") {
+        el.innerHTML = `<div class="row quiz-msg">拖動畫布上的對稱軸(橘線),使 A、B 兩點關於軸對稱</div>
+          <div class="row"><button class="primary" id="j10phase2" style="display:${progress["J10-a"] ? "" : "none"}">進入三視圖任務 →</button></div>`;
+        el.querySelector("#j10phase2") && (el.querySelector("#j10phase2").onclick = () => { s.view = "phase2"; render(); });
+      } else {
+        // 三視圖選擇題:選項 A=正確(L型積木), B=錯誤, C=錯誤
+        const opts = [
+          { id: "A", label: "選項 A(L 型,三格)" },
+          { id: "B", label: "選項 B(直線三格)" },
+          { id: "C", label: "選項 C(T 型)" },
+        ];
+        el.innerHTML = `<div class="row quiz-msg">根據三視圖,哪個積木堆正確?</div>` +
+          opts.map((o) => `<button class="quiz-opt${s.chosen === o.id ? (o.id === "A" ? " right" : " wrong") : ""}" data-id="${o.id}">${o.label}</button>`).join("") +
+          `<div id="j10msg" class="quiz-msg">${s.chosen ? (s.chosen === "A" ? "✓ 正確!A 是 L 型積木——正/側/俯視圖全符合" : "✗ 再想想:對照正視圖是兩格高、側視圖是兩格深") : ""}</div>`;
+        el.querySelectorAll(".quiz-opt").forEach((btn) => {
+          btn.onclick = () => {
+            if (s.chosen) return; // 已選不重選
+            s.chosen = btn.dataset.id;
+            if (s.chosen === "A") markGoal("J10-b");
+            render();
+          };
+        });
+      }
+    };
+    this._renderCtl = render;
+    render();
+  },
+  draggables() {
+    const s = this.state;
+    if (s.view !== "phase1") return [];
+    return [{
+      getScreen: () => ({ x: toScr(V(s.axX, 0)).x, y: CY }),
+      setScreen: (px) => {
+        const wx = fromScr(px, CY).x;
+        s.axX = Math.max(-4.5, Math.min(4.5, Math.round(wx * 2) / 2)); // 半格吸附
+      },
+    }];
+  },
+  draw() {
+    const s = this.state;
+    if (s.view === "phase1") {
+      drawGrid(MI(), { original: false });
+      pText(toScr(V(4.6, 0)).x, toScr(V(4.6, 0)).y - 8, "x", TH.dim, 15);
+      pText(toScr(V(0, 4.6)).x + 8, toScr(V(0, 4.6)).y, "y", TH.dim, 15);
+      // A、B 點
+      drawDot(this._A, "#ff5c7a", 9); labelAt(this._A, "A", "#ff5c7a", -18, -6);
+      drawDot(this._B, "#4ade80", 9); labelAt(this._B, "B", "#4ade80", 8, -6);
+      // 對稱軸(橘色垂直線)
+      const axScr = toScr(V(s.axX, 0));
+      g.strokeStyle = "#fbbf24"; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(axScr.x, 60); g.lineTo(axScr.x, 540); g.stroke();
+      pText(axScr.x + 6, 80, `x = ${fmt(s.axX)}`, "#fbbf24", 14, "left", true);
+      // 鏡像點
+      const mirA = V(2 * s.axX - this._A.x, this._A.y);
+      const mirB = V(2 * s.axX - this._B.x, this._B.y);
+      const dA = Math.abs(mirA.x - this._B.x) + Math.abs(mirA.y - this._B.y);
+      const dB = Math.abs(mirB.x - this._A.x) + Math.abs(mirB.y - this._A.y);
+      const correct = dA < 0.15 && dB < 0.15;
+      drawDash(this._A, mirA, "#ff5c7a"); drawDot(mirA, "#ff5c7a", 5);
+      drawDash(this._B, mirB, "#4ade80"); drawDot(mirB, "#4ade80", 5);
+      if (correct) pText(340, 180, "A 與 B 關於軸對稱!", "#4ade80", 20, "center", true);
+      readout.innerHTML = correct
+        ? `<b style="color:#4ade80">對稱軸正確:x = 0</b>`
+        : `對稱軸 x = ${fmt(s.axX)} — A 的鏡像在 (${fmt(mirA.x)},${fmt(mirA.y)}),B 在 (${fmt(this._B.x)},${fmt(this._B.y)})`;
+      if (correct) markGoal("J10-a");
+    } else {
+      // 三視圖示意(Canvas 手繪)
+      pText(340, 110, "根據三視圖,哪個積木堆正確?", TH.text, 18, "center", true);
+      // 畫三張視圖(正/側/俯)— 以 L 型積木為準
+      const drawView = (ox, oy, w, h, label, cells) => {
+        pText(ox + w * 14, oy - 14, label, TH.dim, 13, "center", true);
+        g.strokeStyle = TH.axis; g.lineWidth = 1.5;
+        for (let r = 0; r <= h; r++) {
+          g.beginPath(); g.moveTo(ox, oy + r * 28); g.lineTo(ox + w * 28, oy + r * 28); g.stroke();
+        }
+        for (let c = 0; c <= w; c++) {
+          g.beginPath(); g.moveTo(ox + c * 28, oy); g.lineTo(ox + c * 28, oy + h * 28); g.stroke();
+        }
+        cells.forEach(([r, c]) => {
+          g.fillStyle = "rgba(167,139,250,.55)"; g.fillRect(ox + c * 28 + 1, oy + r * 28 + 1, 26, 26);
+        });
+      };
+      // L 型:底 2×1 + 上 1×1 右邊 → 正視圖 2高×2寬;側視圖 2高×1寬;俯視圖 1高×2寬
+      drawView(110, 180, 2, 2, "正視圖", [[0,1],[1,0],[1,1]]); // 右上+底兩格
+      drawView(230, 180, 1, 2, "側視圖", [[0,0],[1,0]]);        // 兩格高
+      drawView(350, 180, 2, 1, "俯視圖", [[0,0],[0,1]]);        // 兩格寬
+      readout.innerHTML = progress["J10-b"] ? `<b style="color:#4ade80">三視圖答對!</b>` : "從三個方向觀察積木,選出正確的堆法";
+    }
+  },
+};
+
+/* ─── 七上總測驗 B1Q ─── */
+const B1Q = makeQuiz("B1Q", "七上", 4, [
+  { q: "−3 + (−4) = ?",
+    opts: ["−7", "7", "−1", "1"],
+    why: "兩個負數相加,絕對值相加且保留負號:−3 + (−4) = −7。(J1)" },
+  { q: "解方程式 x + 5 = 11,x = ?",
+    opts: ["6", "16", "−6", "55"],
+    why: "兩邊各減 5:x = 11 − 5 = 6;等量公理。(J2)" },
+  { q: "72 的質因數分解是?",
+    opts: ["2³×3²", "8×9", "2×36", "3×24"],
+    why: "72 = 8×9 = 2³×3²;8 和 9、36、24 都不是質數,還能繼續拆。(J5)" },
+  { q: "¾ × ⅔ = ?",
+    opts: ["½", "2/1", "5/6", "9/8"],
+    why: "分子乘分子、分母乘分母:3×2=6, 4×3=12,化簡 6/12 = ½。(J6)" },
+  { q: "科學家記錄 5 次實驗溫度:−4, 0, 2, −1, 3。平均溫度是?",
+    opts: ["0", "1", "−1", "2"],
+    why: "(−4+0+2+(−1)+3)/5 = 0/5 = 0;正負相消再除以個數。(J1+J5 整合)" },
+]);
+
+/* ─── 銜接總測驗(JQ,id 不變) ─── */
+const JQ_LEVEL = makeQuiz("JQ", "銜接總測驗", 5, [
   { q: "3 + (−5) = ?",
     opts: ["−2", "2", "−8", "8"],
     why: "加負數 = 轉身往左走 5 步:從 3 走到 −2。(關 1)" },
@@ -806,19 +1173,22 @@ JH_LEVELS.push(makeQuiz("JQ", "國中銜接", 5, [
   { q: "二分之一 × 三分之二 = ?",
     opts: ["三分之一", "五分之二", "六分之一", "四分之三"],
     why: "面積模型:12 格裡的綠色佔 4 格 = 1/3;分子乘分子、分母乘分母。(關 6)" },
-]));
+]);
 
-/* ---------- 科目 ---------- */
-/* ---------- 科目 ---------- */
+/* ---------- 科目:按冊分組 ---------- */
+// JH_LEVELS[0-5] = J1 J2 J3 J4 J5 J6 (原始陣列,id 不動)
+const [_J1, _J2, _J3, _J4, _J5, _J6] = JH_LEVELS; // 解構方便引用
+
 const SUBJECTS = {
-  jh: { name: "國中銜接", levels: JH_LEVELS },
+  b1: { name: "七上", levels: [_J1, _J2, _J5, _J6, B1Q] },
+  b2: { name: "七下", levels: [_J3, _J4, J7, J8, J9, J10, JQ_LEVEL] },
 };
-let curSubject = "jh";
+let curSubject = "b1";
 
 /* ---------- UI 骨架 ---------- */
 const tabsEl = document.getElementById("tabs");
 const subjEl = document.getElementById("subjects");
-let levels = JH_LEVELS;
+let levels = SUBJECTS[curSubject].levels;
 let curIdx = 0;
 const cur = () => levels[curIdx];
 
