@@ -719,6 +719,7 @@ const JH_LEVELS = [
 /* ═══════════════════════════════════════════════════════════
    總測驗關 — 每科收尾,通過才算完成該科目(證書條件)
    ═══════════════════════════════════════════════════════════ */
+// opts[0] 必須是正解(工廠會洗牌,正解在 opts[0] 才能被正確標記)
 function makeQuiz(id, name, pass, questions) {
   return {
     id, short: "總測驗", title: `總測驗|${name}:把 ${questions.length} 關串起來`, ep: "Q",
@@ -877,7 +878,7 @@ const J8 = {
   state: { q: 0, ep: 3, closed: false, right: false },
   nl() { const X = (v) => 80 + (v + 7) * 33; return { X, invX: (px) => (px - 80) / 33 - 7, Y: 340 }; },
   enter() { this.loadQ(0); this._renderCtl && this._renderCtl(); },
-  loadQ(k) { const q = this.qs[k]; Object.assign(this.state, { q: k, ep: q.ans + 2, closed: false, right: false }); },
+  loadQ(k) { const q = this.qs[k]; Object.assign(this.state, { q: k, ep: q.ans + 2, closed: k === 0 ? true : false, right: k === 0 ? true : false }); },
   demo() { const s = this.state, lv = this; const R = () => lv._renderCtl && lv._renderCtl(); return [
     { call: () => { lv.loadQ(0); R(); }, cap: "解 x + 2 < 5:兩邊減 2,得 x < 3", dur: 2600 },
     { call: () => { s.ep = 3; s.closed = false; R(); }, cap: "3 本身不算在解裡——用空心圈(開圈)標記端點", dur: 2400 },
@@ -962,7 +963,7 @@ const J9 = {
   ],
   // 5 個資料值,可拖;目標平均=6;第 3 筆初始為超大離群值
   state: { vals: [5, 6, 7, 6, 5], outlierZeroed: false },
-  enter() { Object.assign(this.state, { vals: [5, 6, 7, 6, 5], outlierZeroed: false }); },
+  enter() { Object.assign(this.state, { vals: [5, 6, 14, 6, 5], outlierZeroed: false }); },
   _mean() { const s = this.state; return s.vals.reduce((a, b) => a + b, 0) / s.vals.length; },
   demo() { const s = this.state; return [
     { call: () => { s.vals = [5, 6, 7, 6, 5]; }, cap: "這 5 條長條代表 5 個資料;紅線是平均數", dur: 2600 },
@@ -1033,7 +1034,7 @@ const J10 = {
   state: { axX: 0, view: "phase1", chosen: null },
   // 對稱任務:左點 A=(-2,1), 右點 B=(2,1),正確軸=x=0
   _A: V(-2, 1), _B: V(2, 1),
-  enter() { Object.assign(this.state, { axX: 0, view: "phase1", chosen: null }); this._renderCtl && this._renderCtl(); },
+  enter() { Object.assign(this.state, { axX: -2, view: "phase1", chosen: null }); this._renderCtl && this._renderCtl(); },
   demo() { const s = this.state, lv = this; const R = () => lv._renderCtl && lv._renderCtl(); return [
     { call: () => { s.view = "phase1"; s.axX = -2; R(); }, cap: "兩個標記點,對稱軸在它們的正中央——就是連線的垂直平分線", dur: 2800 },
     { num: [() => s.axX, (v) => s.axX = v, 0], cap: "軸往中間滑過來……A 和 B 到軸的距離相等:這就是對稱", dur: 2600 },
@@ -1146,7 +1147,7 @@ const B1Q = makeQuiz("B1Q", "七上", 4, [
     opts: ["2³×3²", "8×9", "2×36", "3×24"],
     why: "72 = 8×9 = 2³×3²;8 和 9、36、24 都不是質數,還能繼續拆。(J5)" },
   { q: "¾ × ⅔ = ?",
-    opts: ["½", "2/1", "5/6", "9/8"],
+    opts: ["½", "5/6", "9/12", "9/8"],
     why: "分子乘分子、分母乘分母:3×2=6, 4×3=12,化簡 6/12 = ½。(J6)" },
   { q: "科學家記錄 5 次實驗溫度:−4, 0, 2, −1, 3。平均溫度是?",
     opts: ["0", "1", "−1", "2"],
