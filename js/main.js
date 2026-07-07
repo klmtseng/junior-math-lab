@@ -221,7 +221,7 @@ let demoSeen = {};
 try { demoSeen = JSON.parse(localStorage.getItem("jrlab-demoseen") || "{}"); } catch (e) {}
 
 // 旁白語音(預錄 mp3,單一 Audio 元素重用對 iOS 較友善)
-let voiceOn = localStorage.getItem("jrlab-voice") === "1";
+let voiceOn = localStorage.getItem("jrlab-voice") !== "0"; // 預設開;使用者關過才記住關
 let voiceAudio = null;
 function getAudioEl() { if (!voiceAudio) voiceAudio = new Audio(); return voiceAudio; }
 function stopVoice() { if (voiceAudio) { voiceAudio.pause(); voiceAudio.onended = voiceAudio.onerror = null; } }
@@ -948,6 +948,11 @@ voiceBtn.onclick = () => {
   if (!voiceOn) { stopVoice(); player.clipWaiting = false; }
   else { getAudioEl(); if (player.active) player.playClip(player.steps[player.idx]); } // 開啟時解鎖音訊+補播當前句
 };
+
+// 首次手勢解鎖音訊:進站自動示範的旁白會被瀏覽器自動播放政策擋下,拿到第一個手勢就補播當前句
+document.addEventListener("pointerdown", () => {
+  if (voiceOn && player.active && voiceAudio && voiceAudio.paused) player.playClip(player.steps[player.idx]);
+}, { once: true });
 
 renderSubjects();
 switchLevel(0);
