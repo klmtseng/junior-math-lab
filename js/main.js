@@ -138,6 +138,16 @@ function labelAt(p, text, color, dx = 10, dy = -10) {
   g.fillStyle = color; g.font = "bold 16px 'Cambria Math', serif";
   g.fillText(text, s.x + dx, s.y + dy);
 }
+function pText(x, y, txt, color, size = 15, align = "left", bold = false) {
+  g.fillStyle = color; g.textAlign = align;
+  g.font = `${bold ? "bold " : ""}${size}px sans-serif`;
+  g.fillText(txt, x, y); g.textAlign = "left";
+}
+function drawDisc(cx, cy, r, fill, stroke, lw = 2) {
+  g.beginPath(); g.arc(cx, cy, r, 0, 7);
+  if (fill) { g.fillStyle = fill; g.fill(); }
+  if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw; g.stroke(); }
+}
 
 /* ---------- 進度 ---------- */
 const PKEY = "jrlab-progress-v1";
