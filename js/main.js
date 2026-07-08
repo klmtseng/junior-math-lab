@@ -717,6 +717,27 @@ const JH_LEVELS = [
 ];
 
 /* ═══════════════════════════════════════════════════════════
+   錯題本 — 持久化跨輪錯題,複習到會了自動清除
+   key "jrlab-wrongbook-v1",結構 { [quizId]: [題目索引,...] }
+   ⚠ questions 陣列只准 append 不准重排,否則索引會指錯題
+   ═══════════════════════════════════════════════════════════ */
+const WKEY = "jrlab-wrongbook-v1";
+let wrongBook = {};
+try { wrongBook = JSON.parse(localStorage.getItem(WKEY) || "{}"); } catch (e) {}
+function saveWrongBook() { localStorage.setItem(WKEY, JSON.stringify(wrongBook)); }
+function wrongList(quizId) { return wrongBook[quizId] || []; }
+function addWrong(quizId, idx) {
+  const arr = wrongBook[quizId] || [];
+  if (!arr.includes(idx)) { arr.push(idx); wrongBook[quizId] = arr; saveWrongBook(); }
+}
+function removeWrong(quizId, idx) {
+  if (!wrongBook[quizId]) return;
+  wrongBook[quizId] = wrongBook[quizId].filter((i) => i !== idx);
+  if (wrongBook[quizId].length === 0) delete wrongBook[quizId];
+  saveWrongBook();
+}
+
+/* ═══════════════════════════════════════════════════════════
    總測驗關 — 每科收尾,通過才算完成該科目(證書條件)
    ═══════════════════════════════════════════════════════════ */
 // opts[0] 必須是正解(工廠會洗牌,正解在 opts[0] 才能被正確標記)
@@ -726,38 +747,73 @@ function makeQuiz(id, name, pass, questions) {
     intro: `<p>不看畫布、不動滑桿——現在只考<b>觀念</b>。${questions.length} 題單選,答對 <b>${pass} 題以上</b>過關;每題答完都有解釋,答錯可以整卷重來。</p><p>這些題目全部來自你玩過的關卡。如果哪題卡住,回去把那關再玩一次,比背答案有用。</p>`,
     formal: `<p class="math">通過標準:${pass}/${questions.length}。每題都對應某一關最重要的那個觀念;選項每次重新洗牌,背位置沒有用。</p>`,
     goals: [{ id: `${id}-pass`, text: `答對 ${pass}/${questions.length} 題以上,拿下本科目` }],
-    state: { i: 0, score: 0, results: [], done: false, answered: false },
+    // review: 複習模式布林;reviewQueue: 此輪複習的 questions 索引陣列
+    state: { i: 0, score: 0, results: [], done: false, answered: false, review: false, reviewQueue: [] },
     enter() {
-      Object.assign(this.state, { i: 0, score: 0, results: [], done: false, answered: false });
+      Object.assign(this.state, { i: 0, score: 0, results: [], done: false, answered: false, review: false, reviewQueue: [] });
+      this._render && this._render();
+    },
+    // 進入複習模式:只出錯題本裡的題
+    enterReview() {
+      const queue = [...wrongList(id)];
+      Object.assign(this.state, { i: 0, score: 0, results: [], done: false, answered: false, review: true, reviewQueue: queue });
       this._render && this._render();
     },
     controls(el) {
       const s = this.state, lv = this;
       const render = () => {
+        const wCount = wrongList(id).length;
+
+        // ── 複習模式結算 ──
+        if (s.done && s.review) {
+          const remaining = wrongList(id).length;
+          el.innerHTML = `<div class="quiz-q">${remaining === 0 ? "🎉 錯題全清!" : `還剩 <b>${remaining}</b> 題沒掌握`}</div>
+            <div class="row">
+              <button class="primary" id="back-normal">回正式測驗</button>
+              ${remaining > 0 ? `<button id="review-again">再練一次錯題</button>` : ""}
+            </div>`;
+          el.querySelector("#back-normal").onclick = () => lv.enter();
+          el.querySelector("#review-again") && (el.querySelector("#review-again").onclick = () => lv.enterReview());
+          return;
+        }
+
+        // ── 正式測驗結算 ──
         if (s.done) {
           const passed = s.score >= pass;
           el.innerHTML = `<div class="quiz-q">${passed ? "🎉 通過!" : "差一點,再來一輪!"}　得分 <b>${s.score}/${questions.length}</b></div>
-            <div class="row"><button class="primary" id="again">重新測驗</button></div>`;
+            <div class="row">
+              <button class="primary" id="again">重新測驗</button>
+              ${wCount > 0 ? `<button id="review-btn">📕 錯題複習(${wCount} 題)</button>` : ""}
+            </div>`;
           el.querySelector("#again").onclick = () => lv.enter();
+          el.querySelector("#review-btn") && (el.querySelector("#review-btn").onclick = () => lv.enterReview());
           if (passed) markGoal(`${id}-pass`);
           return;
         }
-        const q = questions[s.i];
+
+        // ── 起始畫面(尚未進入第一題)已由 enter()/enterReview() 初始化,直接出題 ──
+        // 決定當前題目的 questions 索引
+        const qIdx = s.review ? s.reviewQueue[s.i] : s.i;
+        const q = questions[qIdx];
         const opts = q.opts.map((text, k) => ({ text, ok: k === 0 }));
-        for (let k = opts.length - 1; k > 0; k--) { // 洗牌:正解不固定在同一格
+        for (let k = opts.length - 1; k > 0; k--) { // 洗牌
           const j = Math.floor(Math.random() * (k + 1));
           [opts[k], opts[j]] = [opts[j], opts[k]];
         }
-        el.innerHTML = `<div class="quiz-q"><b>第 ${s.i + 1}/${questions.length} 題</b>　${q.q}</div>` +
+        const total = s.review ? s.reviewQueue.length : questions.length;
+        const modeTag = s.review ? "📕 複習" : "";
+        el.innerHTML = `<div class="quiz-q">${modeTag ? `<span style="color:#fbbf24">${modeTag}</span>　` : ""}<b>第 ${s.i + 1}/${total} 題</b>　${q.q}</div>` +
           opts.map((o, k) => `<button class="quiz-opt" data-k="${k}">${o.text}</button>`).join("") +
           `<div class="quiz-msg" id="qmsg"></div>
-           <div class="row"><button class="primary" id="nextq" style="display:none">${s.i + 1 === questions.length ? "看結果" : "下一題"}</button></div>`;
+           <div class="row"><button class="primary" id="nextq" style="display:none">${s.i + 1 === total ? (s.review ? "看複習結果" : "看結果") : "下一題"}</button></div>`;
         el.querySelectorAll(".quiz-opt").forEach((btn, k) => {
           btn.onclick = () => {
             if (s.answered) return;
             s.answered = true;
             const ok = opts[k].ok;
-            if (ok) s.score++;
+            // 更新錯題本:答對→移除;答錯→加入(兩種模式都執行)
+            if (ok) { removeWrong(id, qIdx); } else { addWrong(id, qIdx); }
+            if (ok && !s.review) s.score++;
             s.results.push(ok);
             btn.classList.add(ok ? "right" : "wrong");
             el.querySelectorAll(".quiz-opt").forEach((b, j) => { if (opts[j].ok) b.classList.add("right"); });
@@ -767,17 +823,29 @@ function makeQuiz(id, name, pass, questions) {
         });
         el.querySelector("#nextq").onclick = () => {
           s.i++; s.answered = false;
-          if (s.i >= questions.length) s.done = true;
+          const total2 = s.review ? s.reviewQueue.length : questions.length;
+          if (s.i >= total2) s.done = true;
           render();
         };
+
+        // 起始畫面複習按鈕:注入在題目之前(利用 insertAdjacentHTML)
+        if (!s.review && wCount > 0 && s.i === 0 && s.results.length === 0) {
+          el.insertAdjacentHTML("afterbegin",
+            `<div class="row"><button id="review-start">📕 錯題複習(${wCount} 題)</button></div>`);
+          el.querySelector("#review-start").onclick = () => lv.enterReview();
+        }
       };
       this._render = render;
       render();
     },
     draw() {
-      const s = this.state, n = questions.length;
-      const X0 = 120, Y = 300, gap = Math.min(70, 440 / n);
-      pText(340, 180, s.done ? (s.score >= pass ? "🏆" : "💪") : "📝", TH.text, 72, "center");
+      const s = this.state;
+      const isReview = s.review;
+      const displayList = isReview ? s.reviewQueue : questions.map((_, k) => k);
+      const n = displayList.length;
+      const X0 = 120, Y = 300, gap = Math.min(70, 440 / Math.max(n, 1));
+      const icon = isReview ? "📕" : (s.done ? (s.score >= pass ? "🏆" : "💪") : "📝");
+      pText(340, 180, icon, TH.text, 72, "center");
       for (let k = 0; k < n; k++) {
         const x = X0 + k * gap + gap / 2;
         let fill = TH.gridFaint, label = "";
@@ -786,10 +854,16 @@ function makeQuiz(id, name, pass, questions) {
         drawDisc(x, Y, 16, fill, TH.axis, 1.5);
         if (label) pText(x, Y + 6, label, "#0a0e1a", 16, "center", true);
       }
-      pText(340, Y + 70, `${s.score} / ${n}　(通過線 ${pass})`, TH.dim, 18, "center");
+      if (!isReview) {
+        pText(340, Y + 70, `${s.score} / ${questions.length}　(通過線 ${pass})`, TH.dim, 18, "center");
+      } else {
+        pText(340, Y + 70, `複習模式・${n} 題`, TH.dim, 18, "center");
+      }
       readout.innerHTML = s.done
-        ? (s.score >= pass ? `<b style="color:#4ade80">通過!${name} 完成</b>` : `${s.score}/${n},通過線 ${pass}——再來一輪`)
-        : `第 ${s.i + 1} 題,目前 ${s.score} 分`;
+        ? (isReview
+            ? (wrongList(id).length === 0 ? `<b style="color:#4ade80">錯題全清!</b>` : `還剩 ${wrongList(id).length} 題沒掌握`)
+            : (s.score >= pass ? `<b style="color:#4ade80">通過!${name} 完成</b>` : `${s.score}/${questions.length},通過線 ${pass}——再來一輪`))
+        : (isReview ? `📕 複習第 ${s.i + 1}/${n} 題` : `第 ${s.i + 1} 題,目前 ${s.score} 分`);
     },
   };
 }
