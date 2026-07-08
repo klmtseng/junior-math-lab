@@ -417,7 +417,7 @@ const JH_LEVELS = [
     { call: () => { s.cL--; s.cR--; R(); }, cap: "兩邊各拿走一顆——還是平的", dur: 1800 },
     { call: () => { s.cL--; s.cR--; R(); }, cap: "再拿走一顆", dur: 1400 },
     { call: () => { s.cL--; s.cR--; R(); }, cap: "左邊只剩 x!右邊剩 4 顆:x = 4", dur: 2600 },
-    { call: () => { lv.loadQ(0); R(); }, cap: "換你來,之後還有第二題 2x = 6(提示:分一半)", dur: 2000 },
+    { call: () => { lv.loadQ(0); R(); }, cap: "換你來,之後還有第二題 2x = 6,提示:分一半", dur: 2000 },
   ]; },
   controls(el) {
     const s = this.state, lv = this;
@@ -502,7 +502,7 @@ const JH_LEVELS = [
   targets: [V(3, -2), V(-4, 1)],
   enter() { this.state.pt = V(1, 1); this.state.stage = 0; },
   demo() { const s = this.state; return [
-    { call: () => { s.pt = V(0, 0); }, cap: "指令 (3, 負2):第一個數管左右,第二個管上下。從原點出發", dur: 2600 },
+    { call: () => { s.pt = V(0, 0); }, cap: "指令是一組數對:3、負2。第一個數管左右,第二個管上下。從原點出發", dur: 2600 },
     { vec: [() => s.pt, (w) => s.pt = w, V(3, 0)], cap: "先走 x:往右 3", dur: 1800 },
     { vec: [() => s.pt, (w) => s.pt = w, V(3, -2)], cap: "再走 y:往下 2——到了!", dur: 2000 },
     { vec: [() => s.pt, (w) => s.pt = w, V(1, 1)], cap: "換你尋寶。記住:先 x 再 y,順序不能換", dur: 1800 },
@@ -605,7 +605,7 @@ const JH_LEVELS = [
     { call: () => { s.remain = 30; s.factors = [2]; R(); }, cap: "60 除以 2 = 30,拆下一顆 2", dur: 2000 },
     { call: () => { s.remain = 15; s.factors = [2, 2]; R(); }, cap: "30 再除以 2 = 15。15 除不了 2,換 3", dur: 2200 },
     { call: () => { s.remain = 5; s.factors = [2, 2, 3]; R(); }, cap: "15 除以 3 = 5,5 本身是質數", dur: 2000 },
-    { call: () => { s.remain = 1; s.factors = [2, 2, 3, 5]; R(); }, cap: "除到剩 1:60 = 2×2×3×5,收工", dur: 2600 },
+    { call: () => { s.remain = 1; s.factors = [2, 2, 3, 5]; R(); }, cap: "除到剩 1:60 = 2²×3×5,收工", dur: 2600 },
     { call: () => { lv.loadQ(0); R(); }, cap: "換你拆,拆完 60 還有 84", dur: 1600 },
   ]; },
   controls(el) {
@@ -888,7 +888,7 @@ const J7 = {
   demo() { const s = this.state; return [
     { call: () => { s.stage = 0; s.pt = V(0, 0); }, cap: "一條方程式 = 一條直線,無限多個點都滿足它", dur: 2400 },
     { cap: "兩條直線,各自有一整排解——但同時滿足兩條線的點只有一個", dur: 2600 },
-    { vec: [() => s.pt, (w) => s.pt = w, V(1, 2)], cap: "交點就是聯立方程式的解!y=x+1 和 y=−x+3 在 (1, 2) 相交", dur: 2800 },
+    { vec: [() => s.pt, (w) => s.pt = w, V(1, 2)], cap: "交點就是聯立方程式的解!y=x+1 和 y=−x+3 相交在 x=1、y=2", dur: 2800 },
     { vec: [() => s.pt, (w) => s.pt = w, V(0, 0)], cap: "換你:把黃點拖到交點,感受「同時成立」的意義", dur: 2000 },
   ]; },
   draggables() {
@@ -955,7 +955,7 @@ const J8 = {
   loadQ(k) { const q = this.qs[k]; Object.assign(this.state, { q: k, ep: q.ans + 2, closed: k === 0 ? true : false, right: k === 0 ? true : false }); },
   demo() { const s = this.state, lv = this; const R = () => lv._renderCtl && lv._renderCtl(); return [
     { call: () => { lv.loadQ(0); R(); }, cap: "解 x + 2 < 5:兩邊減 2,得 x < 3", dur: 2600 },
-    { call: () => { s.ep = 3; s.closed = false; R(); }, cap: "3 本身不算在解裡——用空心圈(開圈)標記端點", dur: 2400 },
+    { call: () => { s.ep = 3; s.closed = false; R(); }, cap: "3 本身不算在解裡——用空心圈,也叫開圈,標記端點", dur: 2400 },
     { call: () => { s.right = false; R(); }, cap: "x < 3 = 所有比 3 小的數,箭頭向左塗色", dur: 2400 },
     { call: () => { lv.loadQ(1); R(); }, cap: "換題:−2x ≤ 4。注意除以負數要翻轉不等號方向!", dur: 2400 },
     { call: () => { s.ep = -2; s.closed = true; s.right = true; R(); }, cap: "x ≥ −2:等號成立用閉圈,≥ 所以箭頭向右——換你試試!", dur: 2400 },
@@ -1043,7 +1043,7 @@ const J9 = {
     { call: () => { s.vals = [5, 6, 7, 6, 5]; }, cap: "這 5 條長條代表 5 個資料;紅線是平均數", dur: 2600 },
     { cap: "把第 3 條拖高:你看,平均線也往上移了!每個值都影響平均", dur: 2600 },
     { call: () => { s.vals = [5, 6, 14, 6, 5]; }, cap: "這一筆跑到 14——它叫離群值,讓平均嚴重偏高", dur: 2800 },
-    { call: () => { s.vals = [5, 6, 7, 6, 5]; }, cap: "去掉離群值(拖回 0),平均就正常了。換你操作!", dur: 2200 },
+    { call: () => { s.vals = [5, 6, 7, 6, 5]; }, cap: "把離群值拖回 0,平均就正常了。換你操作!", dur: 2200 },
   ]; },
   draggables() {
     const s = this.state;

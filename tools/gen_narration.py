@@ -3,6 +3,7 @@
 用法: ~/Desktop/AI_MAC/tools/kokoro-venv/bin/python gen_narration.py [--force]
 讀 tools/captions.json → 每句符號轉口語 → 生成 audio/<id>_<i>.mp3
 音色:zf_xiaoxiao(大陸腔,使用者定案 2026-07-06);中文 G2P 必用 misaki(espeak 唸不了)。
+字幕寫作規則:禁用括號(舊版會吞成黏音);座標/數對用「3、負2」式寫法;符號轉換表見 WORDS。
 """
 import re, os, sys, json, subprocess, tempfile
 import soundfile as sf
@@ -26,7 +27,7 @@ WORDS = [
     ("°", "度"), ("′", "撇"), ("·", " "), ("|", ""),
     ("—", "，"), ("…", "，"), ("~", "到"),
     ("<", "小於"), (">", "大於"), ("=", " 等於 "), ("+", " 加 "),
-    ("(", ""), (")", ""), ("（", ""), ("）", ""),
+    ("(", "，"), (")", "，"), ("（", "，"), ("）", "，"),  # 括號=停頓非刪除(黏音教訓 2026-07-08);字幕寫作規則:盡量別用括號,改逗號
 ]
 
 def say(t):
