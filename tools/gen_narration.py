@@ -31,6 +31,10 @@ WORDS = [
 ]
 
 def say(t):
+    # 代數字母:x/y 唸中文名(kokoro zh 對孤立拉丁字母發音不清,STT 回讀驗證 2026-07-08)
+    t = re.sub(r"(?<![A-Za-z0-9])(\d+)\s*[xX](?![A-Za-z])", r"\1 艾克斯", t)
+    t = re.sub(r"(?<![A-Za-z])[xX](?![A-Za-z])", "艾克斯", t)
+    t = re.sub(r"(?<![A-Za-z])[yY](?![A-Za-z])", "歪", t)
     # 箭頭接數字 = 趨近;其餘箭頭 = 停頓
     t = re.sub(r"→\s*(-?[0-9∞])", r" 趨近 \1", t)
     t = t.replace("→", "，")
