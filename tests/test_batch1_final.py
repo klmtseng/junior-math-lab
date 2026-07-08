@@ -45,15 +45,16 @@ try:
         mp3 = pg.evaluate("() => performance.getEntriesByType('resource').filter(r=>r.name.includes('.mp3')).length")
         m404 = pg.evaluate("() => performance.getEntriesByType('resource').filter(r=>r.name.includes('.mp3') && r.responseStatus===404).length")
 
-        t1 = len(subs) == 2
-        t2 = opened == 12  # 七上 5 關 + 七下 7 關
+        # 原始 2 科目(b1/b2)共 12 關;drill.js 加入第 3 科目(mx)共 3 關 → 總計 3 科目 15 關
+        t1 = len(subs) == 3
+        t2 = opened == 15  # 七上 5 + 七下 7 + 綜合演練 3
         t3 = m404 == 0
         t4 = len(errs) == 0
 
         all_pass = t1 and t2 and t3 and t4
         print(f"subjects={subs} opened={opened} mp3_requests={mp3} mp3_404={m404} console_errors={len(errs)} {errs[:3]}")
-        print(f"T1 科目數=2: {'PASS' if t1 else 'FAIL'}")
-        print(f"T2 共12關: {'PASS' if t2 else 'FAIL'} (opened={opened})")
+        print(f"T1 科目數=3(七上/七下/綜合演練): {'PASS' if t1 else 'FAIL'}")
+        print(f"T2 共15關: {'PASS' if t2 else 'FAIL'} (opened={opened})")
         print(f"T3 無404音檔: {'PASS' if t3 else 'FAIL'}")
         print(f"T4 無console error: {'PASS' if t4 else 'FAIL'}")
         b.close()
