@@ -1,25 +1,44 @@
-# 線代實驗室 LA Lab
+# 國中數感實驗室 Junior Math Lab
 
-用手拖出線性代數的幾何直覺。8 個互動關卡,配合 [JOHNSON-MATH](https://www.youtube.com/@JOHNSON-MATH) 《線性代數》EP1–EP3 服用。
+108 課綱七年級互動數學練習站。12 個關卡(七上 / 七下兩冊),用拖動、點選直接感受數學直覺。
 
 純前端、零依賴(Canvas 2D + vanilla JS),開 `index.html` 即用;進度存 localStorage。
+> **注意**:進度與錯題本存在本機瀏覽器,清除快取會消失;換裝置不同步。
 
-## 關卡 ↔ 影片對照
+## 關卡一覽
 
-| 關 | 主題 | 對應影片 |
+### 七上
+
+| 關 | 主題 | 對應課綱單元 |
 |---|---|---|
-| 1 | 向量 = 基向量的配方 | [EP1 基向量與張成空間](https://www.youtube.com/watch?v=ZvDpkXAvWGk) |
-| 2 | 基向量搬家,全世界跟著搬(線性變換) | EP1 |
-| 3 | 張成空間 span + 共線塌陷 | EP1 |
-| 4 | 矩陣 = 變形指令(旋轉/剪切/縮放/鏡射) | [EP2 行列式與矩陣秩](https://www.youtube.com/watch?v=9gRzBcHhYXw) |
-| 5 | 行列式 = 面積縮放(det=0 塌陷、det<0 翻面) | EP2 |
-| 6 | 矩陣乘法 = 變換接力(AB ≠ BA) | EP2 |
-| 7 | 內積 = 投影,親手做出正交 | [EP3 特徵值與內積投影](https://www.youtube.com/watch?v=Ddw4H_pT_AM) |
-| 8 | 特徵向量獵人:找出不轉向的方向 | EP3 |
+| J1 | 數線負數 | 數與數線(正負數) |
+| J2 | 天平解方程 | 一元一次方程式 |
+| J5 | 質因數分解 | 因數倍數與分數運算 |
+| J6 | 分數乘法 | 因數倍數與分數運算 |
+| B1Q | 七上總測驗 | — |
 
-## 旁白語音(選用)
+### 七下
 
-示範模式可開 🔊 旁白(預錄 mp3,Kokoro zf_xiaoxiao 中文女聲)。重生:`~/Desktop/AI_MAC/tools/kokoro-venv/bin/python tools/gen_narration.py`(需 misaki[zh])。字幕改了要重跑。
+| 關 | 主題 | 對應課綱單元 |
+|---|---|---|
+| J3 | 座標尋寶 | 直角座標與方程式圖形 |
+| J4 | 比與比例 | 比例(比例式/正反比) |
+| J7 | 交點獵人 | 二元一次聯立方程式 |
+| J8 | 數線塗色 | 一元一次不等式 |
+| J9 | 數據偵探 | 統計圖表與數據 |
+| J10 | 鏡子與積木 | 線對稱與三視圖 |
+| JQ | 七下銜接總測驗 | — |
+
+## 特色
+
+- 每關配**自動示範動畫**(首次進入自動播,可重播)
+- 示範附**語音旁白**(Kokoro zf_xiaoxiao 中文,預錄 mp3)
+- 每冊結尾有**總測驗**,答錯自動加入**錯題複習本**
+- 深色 / 淺色主題切換(localStorage 記住)
+
+## 課程總綱
+
+詳見 [SYLLABUS.md](SYLLABUS.md),含 108 課綱單元對照與後續批次規劃。
 
 ## 本機開發
 
@@ -27,8 +46,16 @@
 python3 -m http.server 8123   # 然後開 http://localhost:8123/
 ```
 
-驗收:Playwright + Chromium(本機 Chrome WebGL 壞,但本專案只用 Canvas 2D,不受影響)。
+測試:
+
+```bash
+cd tests && python3 test_wrongbook.py
+cd tests && python3 test_batch1_final.py
+cd tests && python3 test_voice_default.py
+```
+
+旁白重生:`tools/kokoro-venv/bin/python tools/gen_narration.py`(需 misaki[zh])。
 
 ## 版權
 
-本站所有視覺化與文案為原創,僅以連結方式指向 JOHNSON-MATH 頻道的概念講解;亦致敬 3Blue1Brown《Essence of Linear Algebra》的教學路線。
+MIT — 內容原創,非官方,與 JOHNSON-MATH 頻道無隸屬關係。

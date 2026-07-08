@@ -1,5 +1,5 @@
 /* 國中數感實驗室 Junior Math Lab — 零依賴 Canvas 互動數學
-   國中銜接六關+總測驗,引擎抽自數感實驗室 */
+   七年級 12 關+總測驗,引擎抽自數感實驗室 */
 "use strict";
 
 /* ---------- 向量 / 矩陣工具 ---------- */
@@ -45,6 +45,7 @@ const THEMES = {
   light: { bg: "#f4f6fc", grid: "#c4cee6", gridFaint: "#e3e8f3", axis: "#8b98ba", text: "#1b2138", dim: "#5c688a", demoGrid: "#dfe5f2", demoAxis: "#b8c2dc", panel: "#eaeef8" },
 };
 let themeName = localStorage.getItem("jrlab-theme") || "dark";
+if (!THEMES[themeName]) themeName = "dark"; // 非法值 fallback
 let TH = THEMES[themeName];
 function applyTheme(name) {
   themeName = name; TH = THEMES[name];
@@ -313,24 +314,6 @@ const player = {
 
 /* ---------- 關卡定義 ---------- */
 const EP = {
-  1: ["EP1 基向量與張成空間 ▶", "https://www.youtube.com/watch?v=ZvDpkXAvWGk"],
-  2: ["EP2 行列式與矩陣秩 ▶", "https://www.youtube.com/watch?v=9gRzBcHhYXw"],
-  3: ["EP3 特徵值與內積投影 ▶", "https://www.youtube.com/watch?v=Ddw4H_pT_AM"],
-  // 概率系列
-  P1: ["概率EP04 連續變數與機率密度 ▶", "https://www.youtube.com/watch?v=dGWDybzB8y8"],
-  P2: ["概率EP05 正態分佈 ▶", "https://www.youtube.com/watch?v=x_pJlGB0S5c"],
-  P3: ["概率EP06 健檢陽性的盲點 ▶", "https://www.youtube.com/watch?v=tFUBBCfnjs8"],
-  P4: ["概率EP07 貝氏定理動態修正 ▶", "https://www.youtube.com/watch?v=TKvSIo8kKBg"],
-  P5: ["概率EP02 隨機變數如何量化 ▶", "https://www.youtube.com/watch?v=QlKIuWLcdJ8"],
-  P6: ["統計推論 大數法則 ▶", "https://www.youtube.com/watch?v=Zz_2gT2RHKU"],
-  P7: ["統計推論 中心極限定理 ▶", "https://www.youtube.com/watch?v=Zz_2gT2RHKU"],
-  P8: ["概率EP01 機率的本質 ▶", "https://www.youtube.com/watch?v=DKx6p4__gkQ"],
-  P9: ["概率EP06 條件機率 ▶", "https://www.youtube.com/watch?v=tFUBBCfnjs8"],
-  // 微積分系列
-  C1: ["微積分EP1 極限與夾擠 ▶", "https://www.youtube.com/watch?v=hjEMERJlhXQ"],
-  C2: ["微積分EP2 微分:瞬間斜率 ▶", "https://www.youtube.com/watch?v=VIVYtZPUGGM"],
-  C3: ["微積分EP2 積分:總帳面積 ▶", "https://www.youtube.com/watch?v=VIVYtZPUGGM"],
-  C4: ["微積分EP3 基本定理 ▶", "https://www.youtube.com/watch?v=vqzEcFxNN_U"],
   Q: ["JOHNSON-MATH 頻道 ▶", "https://www.youtube.com/@JOHNSON-MATH"],
   J: ["國中銜接系列(本站原創)", "https://github.com/klmtseng/junior-math-lab"],
 };
@@ -718,22 +701,53 @@ const JH_LEVELS = [
 
 /* ═══════════════════════════════════════════════════════════
    錯題本 — 持久化跨輪錯題,複習到會了自動清除
-   key "jrlab-wrongbook-v1",結構 { [quizId]: [題目索引,...] }
-   ⚠ questions 陣列只准 append 不准重排,否則索引會指錯題
+   key "jrlab-wrongbook-v1"
+   結構 { [quizId]: { sig: string, idx: number[] } }
+   sig = questions.length + ":" + 全題幹文字拼接的簡單 hash
+   舊格式(純陣列)=視為合法並補簽名;sig 不符=丟棄該測驗錯題本
+   ⚠ questions 陣列只准 append 不准重排,否則索引會指錯題(sig 保護)
    ═══════════════════════════════════════════════════════════ */
 const WKEY = "jrlab-wrongbook-v1";
 let wrongBook = {};
 try { wrongBook = JSON.parse(localStorage.getItem(WKEY) || "{}"); } catch (e) {}
-function saveWrongBook() { localStorage.setItem(WKEY, JSON.stringify(wrongBook)); }
-function wrongList(quizId) { return wrongBook[quizId] || []; }
-function addWrong(quizId, idx) {
-  const arr = wrongBook[quizId] || [];
-  if (!arr.includes(idx)) { arr.push(idx); wrongBook[quizId] = arr; saveWrongBook(); }
+
+// 計算題庫簽名:題目數 + 全部題幹文字的簡單 djb2 hash
+function quizSig(questions) {
+  let h = 5381;
+  const s = questions.length + "|" + questions.map((q) => q.q).join("|");
+  for (let i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; }
+  return questions.length + ":" + h.toString(16);
 }
-function removeWrong(quizId, idx) {
-  if (!wrongBook[quizId]) return;
-  wrongBook[quizId] = wrongBook[quizId].filter((i) => i !== idx);
-  if (wrongBook[quizId].length === 0) delete wrongBook[quizId];
+
+// 讀錯題索引:驗 sig;舊格式(純陣列)自動升遷並補 sig
+function wrongList(quizId, sig) {
+  const raw = wrongBook[quizId];
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    // 舊格式 → 升遷
+    wrongBook[quizId] = { sig, idx: raw };
+    saveWrongBook();
+    return raw;
+  }
+  if (raw.sig !== sig) {
+    // 題庫已變動 → 丟棄
+    delete wrongBook[quizId];
+    saveWrongBook();
+    return [];
+  }
+  return raw.idx || [];
+}
+
+function saveWrongBook() { localStorage.setItem(WKEY, JSON.stringify(wrongBook)); }
+
+function addWrong(quizId, sig, idx) {
+  const arr = wrongList(quizId, sig);
+  if (!arr.includes(idx)) { arr.push(idx); wrongBook[quizId] = { sig, idx: arr }; saveWrongBook(); }
+}
+function removeWrong(quizId, sig, idx) {
+  const arr = wrongList(quizId, sig);
+  const next = arr.filter((i) => i !== idx);
+  if (next.length === 0) { delete wrongBook[quizId]; } else { wrongBook[quizId] = { sig, idx: next }; }
   saveWrongBook();
 }
 
@@ -742,6 +756,7 @@ function removeWrong(quizId, idx) {
    ═══════════════════════════════════════════════════════════ */
 // opts[0] 必須是正解(工廠會洗牌,正解在 opts[0] 才能被正確標記)
 function makeQuiz(id, name, pass, questions) {
+  const sig = quizSig(questions); // 題庫簽名,用於錯題本資料契約
   return {
     id, short: "總測驗", title: `總測驗|${name}:把 ${questions.length} 關串起來`, ep: "Q",
     intro: `<p>不看畫布、不動滑桿——現在只考<b>觀念</b>。${questions.length} 題單選,答對 <b>${pass} 題以上</b>過關;每題答完都有解釋,答錯可以整卷重來。</p><p>這些題目全部來自你玩過的關卡。如果哪題卡住,回去把那關再玩一次,比背答案有用。</p>`,
@@ -755,18 +770,18 @@ function makeQuiz(id, name, pass, questions) {
     },
     // 進入複習模式:只出錯題本裡的題
     enterReview() {
-      const queue = [...wrongList(id)];
+      const queue = [...wrongList(id, sig)];
       Object.assign(this.state, { i: 0, score: 0, results: [], done: false, answered: false, review: true, reviewQueue: queue });
       this._render && this._render();
     },
     controls(el) {
       const s = this.state, lv = this;
       const render = () => {
-        const wCount = wrongList(id).length;
+        const wCount = wrongList(id, sig).length;
 
         // ── 複習模式結算 ──
         if (s.done && s.review) {
-          const remaining = wrongList(id).length;
+          const remaining = wrongList(id, sig).length;
           el.innerHTML = `<div class="quiz-q">${remaining === 0 ? "🎉 錯題全清!" : `還剩 <b>${remaining}</b> 題沒掌握`}</div>
             <div class="row">
               <button class="primary" id="back-normal">回正式測驗</button>
@@ -812,7 +827,7 @@ function makeQuiz(id, name, pass, questions) {
             s.answered = true;
             const ok = opts[k].ok;
             // 更新錯題本:答對→移除;答錯→加入(兩種模式都執行)
-            if (ok) { removeWrong(id, qIdx); } else { addWrong(id, qIdx); }
+            if (ok) { removeWrong(id, sig, qIdx); } else { addWrong(id, sig, qIdx); }
             if (ok && !s.review) s.score++;
             s.results.push(ok);
             btn.classList.add(ok ? "right" : "wrong");
@@ -861,7 +876,7 @@ function makeQuiz(id, name, pass, questions) {
       }
       readout.innerHTML = s.done
         ? (isReview
-            ? (wrongList(id).length === 0 ? `<b style="color:#4ade80">錯題全清!</b>` : `還剩 ${wrongList(id).length} 題沒掌握`)
+            ? (wrongList(id, sig).length === 0 ? `<b style="color:#4ade80">錯題全清!</b>` : `還剩 ${wrongList(id, sig).length} 題沒掌握`)
             : (s.score >= pass ? `<b style="color:#4ade80">通過!${name} 完成</b>` : `${s.score}/${questions.length},通過線 ${pass}——再來一輪`))
         : (isReview ? `📕 複習第 ${s.i + 1}/${n} 題` : `第 ${s.i + 1} 題,目前 ${s.score} 分`);
     },
@@ -1225,7 +1240,7 @@ const B1Q = makeQuiz("B1Q", "七上", 4, [
     why: "分子乘分子、分母乘分母:3×2=6, 4×3=12,化簡 6/12 = ½。(J6)" },
   { q: "科學家記錄 5 次實驗溫度:−4, 0, 2, −1, 3。平均溫度是?",
     opts: ["0", "1", "−1", "2"],
-    why: "(−4+0+2+(−1)+3)/5 = 0/5 = 0;正負相消再除以個數。(J1+J5 整合)" },
+    why: "(−4+0+2+(−1)+3)/5 = 0/5 = 0;正負相消再除以個數。(J1+統計)" },
 ]);
 
 /* ─── 銜接總測驗(JQ,id 不變) ─── */
