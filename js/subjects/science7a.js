@@ -250,16 +250,816 @@ const S7A_01 = {
 };
 
 /* ================================================================
+   makeStaticSciDrill — 段考題庫關卡工廠
+   吃一個靜態題目陣列(選擇題為主),產生與 drill.js makeExamLevel
+   外型一致的關卡物件(同 phase/controls/draw 介面),讓 subject-loader
+   可直接把它放進 levels 陣列。
+   依賴 drill.js 的全域:pText, drawDisc, canvas, g, TH, CX, CY,
+   readout, markGoal, mulberry32, normAns
+   ================================================================
+   題目格式:
+   {
+     tid:  string,          // 唯一 id(用於錯題本)
+     q:    string,          // 題幹
+     opts: string[],        // 選項標籤陣列(["A.…","B.…",…])
+     ans:  string,          // 正解標籤(例 "A" 或 "A.植物細胞才有的構造是")
+     why:  string,          // 解析
+   }
+   ================================================================ */
+function makeStaticSciDrill(id, shortName, titleStr, introStr, goalText, QUESTIONS) {
+  const GOAL_ID = `${id}-pass`;
+  const PASS_RATE = 0.75;   // 自然段考通關線 75%
+  const MIN_Q    = 8;       // 至少答完 8 題才計算通關
+
+  /* 靜態錯題本(與數學 DRILL_BOOK 獨立,key=tid) */
+  const SCI_DBOOK_KEY = "jrlab-sci-drillbook-v1";
+  function getSciDb() {
+    try { return JSON.parse(localStorage.getItem(SCI_DBOOK_KEY) || "{}"); } catch(e) { return {}; }
+  }
+  function saveSciDb(db) { try { localStorage.setItem(SCI_DBOOK_KEY, JSON.stringify(db)); } catch(e) {} }
+  function sciDbMiss(tid) { const db = getSciDb(); db[tid] = (db[tid] || 0) + 1; saveSciDb(db); }
+  function sciDbHit(tid)  { const db = getSciDb(); delete db[tid]; saveSciDb(db); }
+
+  /* 抽題(帶 seed,題序亂排但每輪一樣)*/
+  function pickQuestions(seed) {
+    // 簡單 Fisher-Yates with mulberry32
+    const rng = mulberry32(seed);
+    const arr = QUESTIONS.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr.map(q => ({ q, userAns: null, correct: null }));
+  }
+
+  /* 答案正規化比對:只比對首字母(A/B/C/D),忽略後面文字 */
+  function matchAns(userRaw, correctFull) {
+    const u = (userRaw || "").trim().toUpperCase().charAt(0);
+    const c = (correctFull || "").trim().toUpperCase().charAt(0);
+    return u !== "" && u === c;
+  }
+
+  return {
+    id, short: shortName,
+    title: titleStr,
+    ep: "S", subj: "s7a",
+    intro: introStr,
+    formal: `<p class="math">通關條件:完成一回 ≥${MIN_Q} 題且答對率 ≥${Math.round(PASS_RATE*100)}%。錯題自動進弱點複習。</p>`,
+    goals: [{ id: GOAL_ID, text: goalText }],
+
+    state: {
+      phase: "start",     // start | quiz | result
+      seed: 0,
+      questions: [],      // [{ q, userAns, correct }]
+      qi: 0,
+    },
+
+    enter() {
+      Object.assign(this.state, { phase: "start", seed: Date.now(), questions: [], qi: 0 });
+      this._render && this._render();
+    },
+
+    controls(el) {
+      const s = this.state, lv = this;
+
+      const render = () => {
+        /* ── 起始 ── */
+        if (s.phase === "start") {
+          const sciDb = getSciDb();
+          const weakN = Object.keys(sciDb).filter(tid => QUESTIONS.find(q => q.tid === tid)).length;
+          el.innerHTML = `
+            <div class="quiz-q">本關共 <b>${QUESTIONS.length}</b> 題段考模擬題,完成後可看詳解。點下方開始:</div>
+            <div class="row">
+              <button class="quiz-opt primary" id="sci-drill-start">開始作答(全 ${QUESTIONS.length} 題)</button>
+            </div>
+            ${weakN > 0 ? `<div class="row"><button id="sci-review-btn" style="background:var(--panel2);border:1px solid #fbbf24;color:#fbbf24;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:.86rem;font-family:inherit">📕 弱點複習(${weakN} 題)</button></div>` : ""}
+          `;
+          el.querySelector("#sci-drill-start").onclick = () => {
+            s.seed = Date.now();
+            s.questions = pickQuestions(s.seed);
+            s.qi = 0; s.phase = "quiz";
+            render();
+          };
+          const rvBtn = el.querySelector("#sci-review-btn");
+          if (rvBtn) rvBtn.onclick = () => { lv._startSciReview(el, render); };
+          return;
+        }
+
+        /* ── 弱點複習 ── */
+        if (s.phase === "review") {
+          lv._renderSciReview(el, render);
+          return;
+        }
+
+        /* ── 結果 ── */
+        if (s.phase === "result") {
+          const ok = s.questions.filter(q => q.correct).length;
+          const total = s.questions.length;
+          const rate = ok / total;
+          const pass = total >= MIN_Q && rate >= PASS_RATE;
+          const rows = s.questions.map((item, i) => {
+            const icon = item.correct ? "✓" : "✗";
+            const col  = item.correct ? "#4ade80" : "#ff5c7a";
+            return `<div style="display:flex;gap:6px;align-items:flex-start;margin:3px 0;font-size:.81rem">
+              <span style="color:${col};min-width:18px">${icon}</span>
+              <span>${i+1}. ${item.q.q}<br><span style="color:#9aa5c4">你答:${item.userAns||"(未答)"}　正解:${item.q.ans}　${item.q.why}</span></span>
+            </div>`;
+          }).join("");
+          el.innerHTML = `
+            <div class="quiz-q" style="margin-bottom:6px">${pass ? "🎉 通關!" : "再接再厲!"} 得分 <b>${ok}/${total}</b> (${Math.round(rate*100)}%)${pass?"":"，需 ≥75%"}</div>
+            <div style="background:var(--panel2);border-radius:8px;padding:10px;margin-bottom:10px;max-height:240px;overflow-y:auto">${rows}</div>
+            <div class="row">
+              <button class="primary" id="sci-again">重新作答</button>
+              <button id="sci-back">返回</button>
+            </div>
+          `;
+          el.querySelector("#sci-again").onclick = () => {
+            s.seed = Date.now();
+            s.questions = pickQuestions(s.seed);
+            s.qi = 0; s.phase = "quiz";
+            render();
+          };
+          el.querySelector("#sci-back").onclick = () => { s.phase = "start"; render(); };
+          if (pass) markGoal(GOAL_ID);
+          return;
+        }
+
+        /* ── 作答 ── */
+        if (s.phase === "quiz") {
+          const item = s.questions[s.qi];
+          const isAnswered = item.correct !== null;
+          const optBtns = item.q.opts.map(opt => {
+            const letter = opt.trim().charAt(0).toUpperCase();
+            const selected = item.userAns && item.userAns.toUpperCase().charAt(0) === letter;
+            let borderColor = "#55648f";
+            if (isAnswered && selected) borderColor = item.correct ? "#4ade80" : "#ff5c7a";
+            else if (isAnswered && matchAns(item.q.ans, opt)) borderColor = "#4ade80";
+            return `<button class="sci-opt${selected?" sci-opt-sel":""}" data-opt="${opt}"
+              style="width:100%;text-align:left;margin:3px 0;padding:7px 10px;
+                background:var(--panel2);border:1.5px solid ${borderColor};
+                border-radius:6px;cursor:${isAnswered?"default":"pointer"};
+                font-size:.9rem;font-family:inherit;color:var(--ink);
+                ${isAnswered?"pointer-events:none;":""}">${opt}</button>`;
+          }).join("");
+          el.innerHTML = `
+            <div class="quiz-q"><b>第 ${s.qi+1}/${s.questions.length} 題</b>　${item.q.q}</div>
+            <div style="margin-top:8px">${optBtns}</div>
+            <div id="sci-msg" class="quiz-msg" style="margin-top:6px">
+              ${isAnswered ? (item.correct ? `<span style="color:#4ade80">✓ 正確!</span>` : `<span style="color:#ff5c7a">✗ 正解: ${item.q.ans}</span>`) + `　${item.q.why}` : ""}
+            </div>
+            ${isAnswered ? `<div class="row"><button class="primary" id="sci-next">${s.qi+1 < s.questions.length ? "下一題" : "看成績"}</button></div>` : ""}
+          `;
+          if (!isAnswered) {
+            el.querySelectorAll(".sci-opt").forEach(btn => {
+              btn.onclick = () => {
+                item.userAns = btn.dataset.opt;
+                item.correct = matchAns(btn.dataset.opt, item.q.ans);
+                if (item.correct) sciDbHit(item.q.tid);
+                else sciDbMiss(item.q.tid);
+                render();
+              };
+            });
+          } else {
+            el.querySelector("#sci-next").onclick = () => {
+              s.qi++;
+              if (s.qi >= s.questions.length) s.phase = "result";
+              render();
+            };
+          }
+        }
+      };
+
+      this._render = render;
+      render();
+    },
+
+    /* ── 弱點複習 ── */
+    _sciReviewState: { queue: [], idx: 0 },
+    _startSciReview(el, render) {
+      const sciDb = getSciDb();
+      this._sciReviewState = {
+        queue: QUESTIONS.filter(q => sciDb[q.tid]).slice(),
+        idx: 0, answered: false, userAns: null,
+      };
+      this.state.phase = "review";
+      render();
+    },
+    _renderSciReview(el, render) {
+      const rv = this._sciReviewState;
+      if (rv.idx >= rv.queue.length) {
+        const sciDb = getSciDb();
+        const remaining = Object.keys(sciDb).filter(t => QUESTIONS.find(q => q.tid === t)).length;
+        el.innerHTML = `
+          <div class="quiz-q">${remaining === 0 ? "🎉 弱點全清!" : `還剩 ${remaining} 題弱點`}</div>
+          <div class="row"><button class="primary" id="sci-rv-back">回到選單</button></div>
+        `;
+        el.querySelector("#sci-rv-back").onclick = () => { this.state.phase = "start"; render(); };
+        return;
+      }
+      const item = rv.queue[rv.idx];
+      const optBtns = item.opts.map(opt => {
+        const letter = opt.trim().charAt(0).toUpperCase();
+        const selected = rv.userAns && rv.userAns.toUpperCase().charAt(0) === letter;
+        let borderColor = "#55648f";
+        if (rv.answered && selected) borderColor = rv.correct ? "#4ade80" : "#ff5c7a";
+        else if (rv.answered && matchAns(item.ans, opt)) borderColor = "#4ade80";
+        return `<button class="sci-rv-opt" data-opt="${opt}"
+          style="width:100%;text-align:left;margin:3px 0;padding:7px 10px;
+            background:var(--panel2);border:1.5px solid ${borderColor};
+            border-radius:6px;cursor:${rv.answered?"default":"pointer"};
+            font-size:.9rem;font-family:inherit;color:var(--ink);
+            ${rv.answered?"pointer-events:none;":""}">${opt}</button>`;
+      }).join("");
+      el.innerHTML = `
+        <div class="quiz-q"><span style="color:#fbbf24">📕 弱點複習</span>　${rv.idx+1}/${rv.queue.length}　${item.q}</div>
+        <div style="margin-top:8px">${optBtns}</div>
+        <div id="sci-rv-msg" class="quiz-msg" style="margin-top:6px">
+          ${rv.answered ? (rv.correct ? `<span style="color:#4ade80">✓ 答對了!</span>` : `<span style="color:#ff5c7a">✗ 正解: ${item.ans}</span>`) + `　${item.why}` : ""}
+        </div>
+        ${rv.answered ? `<div class="row"><button class="primary" id="sci-rv-next">${rv.idx+1 < rv.queue.length ? "下一個弱點" : "看結果"}</button></div>` : ""}
+      `;
+      if (!rv.answered) {
+        el.querySelectorAll(".sci-rv-opt").forEach(btn => {
+          btn.onclick = () => {
+            rv.userAns = btn.dataset.opt;
+            rv.correct = matchAns(btn.dataset.opt, item.ans);
+            rv.answered = true;
+            if (rv.correct) sciDbHit(item.tid);
+            render();
+          };
+        });
+      } else {
+        el.querySelector("#sci-rv-next").onclick = () => {
+          rv.idx++;
+          rv.answered = false; rv.userAns = null; rv.correct = false;
+          render();
+        };
+      }
+    },
+
+    draw() {
+      const s = this.state;
+      g.fillStyle = TH.bg; g.fillRect(0, 0, canvas.width, canvas.height);
+      const n = this.state.questions.length || QUESTIONS.length;
+      if (s.phase === "quiz" || s.phase === "result") {
+        const gap = Math.min(48, 560 / Math.max(n, 1));
+        const x0 = (canvas.width - gap * (n - 1)) / 2;
+        const y0 = 280;
+        for (let k = 0; k < n; k++) {
+          const item = s.questions[k];
+          let fill = TH.gridFaint;
+          if (item && item.correct !== null) fill = item.correct ? "#4ade80" : "#ff5c7a";
+          else if (k === s.qi && s.phase === "quiz") fill = "#ffd166";
+          drawDisc(x0 + k * gap, y0, 11, fill, TH.axis, 1.5);
+        }
+        const ok = s.questions.filter(q => q.correct).length;
+        const done = s.questions.filter(q => q.correct !== null).length;
+        pText(CX, 180, s.phase === "result" ? (ok/n >= PASS_RATE ? "🏆" : "💪") : "📝", TH.text, 72, "center");
+        pText(CX, 340, `${ok} / ${done}`, TH.dim, 20, "center");
+        readout.innerHTML = s.phase === "result"
+          ? `<b style="color:${ok/n>=PASS_RATE?"#4ade80":"#ffd166"}">${ok}/${n} 答對 (${Math.round(ok/n*100)}%)</b>`
+          : `第 ${s.qi+1} 題,已對 ${ok} 題`;
+      } else if (s.phase === "review") {
+        pText(CX, 200, "📕", TH.text, 72, "center");
+        const sciDb = getSciDb();
+        const remaining = Object.keys(sciDb).filter(t => QUESTIONS.find(q => q.tid === t)).length;
+        pText(CX, 310, "弱點複習", TH.text, 22, "center", true);
+        pText(CX, 350, `目前還有 ${remaining} 個弱點`, TH.dim, 16, "center");
+        readout.innerHTML = `📕 弱點複習`;
+      } else {
+        pText(CX, 200, "📋", TH.text, 72, "center");
+        pText(CX, 300, shortName, TH.text, 28, "center", true);
+        pText(CX, 340, `共 ${QUESTIONS.length} 題`, TH.dim, 16, "center");
+        const sciDb = getSciDb();
+        const weakN = Object.keys(sciDb).filter(t => QUESTIONS.find(q => q.tid === t)).length;
+        if (weakN > 0) pText(CX, 380, `📕 ${weakN} 個弱點待複習`, "#fbbf24", 14, "center");
+        readout.innerHTML = `段考模擬題庫・${QUESTIONS.length} 題`;
+      }
+    },
+  };
+}
+
+/* ================================================================
+   S7A_01_DRILL — S7A_01 段考題庫(細胞基本構造)
+   知識點:Da-Ⅳ-1 細胞構造、植物/動物差異、生物基本單位
+   題目全部為單選題,答案無爭議(翰林/南一/康軒共識)
+   ================================================================ */
+const S7A_01_QUESTIONS = [
+  {
+    tid: "s7a_01_q1",
+    q: "下列哪一項構造是植物細胞「才有」,動物細胞沒有的?",
+    opts: ["A. 細胞膜", "B. 細胞核", "C. 細胞壁", "D. 粒線體"],
+    ans: "C",
+    why: "細胞壁是植物細胞特有的構造,提供支撐與保護;動物細胞有細胞膜但沒有細胞壁。",
+  },
+  {
+    tid: "s7a_01_q2",
+    q: "下列關於葉綠體的敘述,何者正確?",
+    opts: ["A. 動植物細胞都有葉綠體", "B. 葉綠體負責進行光合作用", "C. 葉綠體是細胞的能量工廠", "D. 葉綠體存在於動物細胞中"],
+    ans: "B",
+    why: "葉綠體負責光合作用,把光能轉換為化學能(有機物);它是植物才有的構造。粒線體才是能量工廠(進行細胞呼吸)。",
+  },
+  {
+    tid: "s7a_01_q3",
+    q: "細胞中進行「細胞呼吸」、負責提供能量的構造是?",
+    opts: ["A. 細胞核", "B. 液胞", "C. 葉綠體", "D. 粒線體"],
+    ans: "D",
+    why: "粒線體是細胞的能量工廠,分解有機物釋放能量(ATP);動植物細胞都有粒線體。",
+  },
+  {
+    tid: "s7a_01_q4",
+    q: "下列關於動植物細胞「共同具有」的構造,哪一項正確?",
+    opts: ["A. 細胞壁、細胞核、葉綠體", "B. 細胞膜、細胞核、粒線體", "C. 細胞壁、細胞膜、液胞", "D. 葉綠體、粒線體、液胞"],
+    ans: "B",
+    why: "細胞膜、細胞核、粒線體是動植物細胞共有的基本構造;細胞壁、葉綠體、大液胞是植物細胞特有的。",
+  },
+  {
+    tid: "s7a_01_q5",
+    q: "小明在顯微鏡下觀察到一個細胞,發現它有細胞壁、葉綠體和大型液胞,這個細胞最可能是哪種生物的細胞?",
+    opts: ["A. 人類皮膚細胞", "B. 青蛙的紅血球", "C. 菠菜葉肉細胞", "D. 草履蟲細胞"],
+    ans: "C",
+    why: "有細胞壁、葉綠體、大型液胞三者同時出現,是植物細胞的特徵;菠菜葉肉細胞是植物細胞。",
+  },
+  {
+    tid: "s7a_01_q6",
+    q: "下列關於細胞的敘述,哪一項是「錯誤」的?",
+    opts: ["A. 細胞是生物體的基本單位", "B. 細胞膜能控制物質進出細胞", "C. 動物細胞沒有細胞壁,所以沒有細胞膜", "D. 植物細胞和動物細胞都有細胞核"],
+    ans: "C",
+    why: "動物細胞沒有細胞壁,但仍然有細胞膜;細胞膜是所有細胞都具備的基本構造。",
+  },
+  {
+    tid: "s7a_01_q7",
+    q: "細胞核的主要功能是?",
+    opts: ["A. 控制物質進出細胞", "B. 進行光合作用", "C. 儲存水分調節滲透壓", "D. 含有遺傳物質(DNA),控制細胞的生命活動"],
+    ans: "D",
+    why: "細胞核含有 DNA(遺傳物質),負責控制細胞的各種生命活動;動植物細胞都有細胞核。",
+  },
+  {
+    tid: "s7a_01_q8",
+    q: "植物細胞的大型「液胞」主要功能是什麼?",
+    opts: ["A. 進行光合作用", "B. 提供支撐與保護", "C. 儲存水分及溶質,調節細胞的滲透壓", "D. 釋放能量供細胞使用"],
+    ans: "C",
+    why: "大型中央液胞主要儲存水分及溶質(如色素、廢物),調節細胞滲透壓,也讓植物細胞保持膨壓而挺立。",
+  },
+  {
+    tid: "s7a_01_q9",
+    q: "以下哪一項,是動物細胞「沒有」而植物細胞「有」的構造?(多選一最完整的答案)",
+    opts: ["A. 細胞膜與細胞核", "B. 細胞壁與葉綠體", "C. 粒線體與細胞核", "D. 細胞膜與粒線體"],
+    ans: "B",
+    why: "細胞壁與葉綠體都是植物細胞特有的,動物細胞皆沒有;選 B 是最完整的答案。",
+  },
+  {
+    tid: "s7a_01_q10",
+    q: "細胞是生物體的基本單位。下列哪個選項的說法是「正確」的?",
+    opts: ["A. 只有動物才由細胞組成", "B. 細菌沒有細胞核,所以不是由細胞組成的生物", "C. 所有生物都由細胞組成", "D. 植物細胞不需要細胞膜因為有細胞壁保護"],
+    ans: "C",
+    why: "所有生物(包括植物、動物、菌類、細菌等)都由細胞組成;細菌屬於原核生物,有細胞但細胞核沒有核膜包覆。植物細胞在細胞壁內層仍有細胞膜。",
+  },
+];
+
+const S7A_01_DRILL = makeStaticSciDrill(
+  "S7A_01D",
+  "細胞構造段考練習",
+  "段考練習|S7A-1D:細胞構造段考題庫",
+  `<p>本關模擬國中七上自然科段考選擇題——<b>10 題</b>,涵蓋細胞構造、動植物差異、各構造功能等知識點。</p><p>點選正確選項,答完後可看詳解與成績;答對率 ≥75% 解鎖通關。</p>`,
+  "完成段考練習且答對率 ≥75%(細胞構造)",
+  S7A_01_QUESTIONS
+);
+
+/* ================================================================
+   S7A_02 — 細胞的構造層次(細胞→組織→器官→器官系統→個體)
+   互動:圖鑑/堆疊互動——按層次順序依序解鎖說明卡片
+   ================================================================ */
+const S7A_02 = {
+  id: "S7A_02", short: "構造層次",
+  title: "關 S7A-2|從細胞到個體:生命的五層架構",
+  ep: "S", subj: "s7a",
+  intro: `<p>生物體的構造有「層次」:最小的<b>細胞</b>聚合成<b>組織</b>,組織再組成<b>器官</b>,器官再組成<b>器官系統</b>,最後形成完整的<b>個體</b>。</p><p>點選每一層次的卡片,依序了解各層次的定義與舉例。當五層都查閱完畢後,試著用拖拉把層次順序排列正確!</p>`,
+  formal: `<p class="math">構造層次(由小到大):細胞 → 組織 → 器官 → 器官系統 → 個體<br>課綱對應:Da-Ⅳ-1(生命現象與生物體的組成)</p>`,
+  goals: [
+    { id: "S7A_02-a", text: "了解五層構造層次(全部查閱卡片)" },
+    { id: "S7A_02-b", text: "正確排列層次順序" },
+  ],
+
+  _LEVELS: [
+    {
+      key: "cell",
+      name: "細胞",
+      icon: "🔬",
+      color: "#4ade80",
+      def: "生物體結構與功能的基本單位",
+      examples: "神經細胞、肌肉細胞、葉肉細胞",
+      note: "不同功能的細胞形態各異,但都有細胞膜、細胞質、細胞核(原核生物除外)。",
+    },
+    {
+      key: "tissue",
+      name: "組織",
+      icon: "🧫",
+      color: "#38bdf8",
+      def: "由許多形態相似、功能相同的細胞組成的集合",
+      examples: "動物:上皮組織、肌肉組織、神經組織、結締組織\n植物:保護組織、輸導組織、基本組織、分生組織",
+      note: "組織是細胞聚合後的第一層,每種組織有其特化功能。",
+    },
+    {
+      key: "organ",
+      name: "器官",
+      icon: "🫀",
+      color: "#fbbf24",
+      def: "由數種不同的組織組合而成,能執行特定功能的結構",
+      examples: "動物:心臟、肺臟、肝臟、胃\n植物:根、莖、葉、花",
+      note: "一個器官通常包含多種組織共同運作,才能完成完整的功能。",
+    },
+    {
+      key: "system",
+      name: "器官系統",
+      icon: "⚙️",
+      color: "#a78bfa",
+      def: "由數個功能相關的器官共同組成,完成某項生理功能",
+      examples: "消化系統、循環系統、呼吸系統、神經系統、運動系統(骨骼+肌肉)",
+      note: "器官系統是動物特有的層次;植物通常不區分器官系統,直接由器官組成個體。",
+    },
+    {
+      key: "organism",
+      name: "個體",
+      icon: "🌿",
+      color: "#ff5c7a",
+      def: "所有器官(或器官系統)協同運作,形成完整且能獨立生存的生命體",
+      examples: "一棵樹、一隻貓、一個人",
+      note: "個體是構造層次的最高階,是能夠獨立與環境互動、完成生命活動的完整單位。",
+    },
+  ],
+
+  /* 排列題的正確順序 */
+  _CORRECT_ORDER: ["cell", "tissue", "organ", "system", "organism"],
+
+  state: {
+    viewed: new Set(),   // 已查閱的層次 key
+    sortArr: [],         // 排列題順序 (key[])
+    sortDone: false,
+    sortCorrect: false,
+    dragging: null,
+    phase: "cards",      // cards | sort
+  },
+
+  enter() {
+    this.state.viewed = new Set();
+    this.state.sortArr = ["tissue", "organism", "cell", "system", "organ"]; // 打亂初始順序
+    this.state.sortDone = false;
+    this.state.sortCorrect = false;
+    this.state.dragging = null;
+    this.state.phase = "cards";
+    this._renderCtl && this._renderCtl();
+  },
+
+  demo() {
+    const s = this.state, lv = this;
+    const R = () => lv._renderCtl && lv._renderCtl();
+    return [
+      {
+        call: () => { s.viewed = new Set(); s.phase = "cards"; R(); },
+        cap: "生物體有五個構造層次,從最小到最大:細胞、組織、器官、器官系統、個體",
+        dur: 3000,
+      },
+      {
+        call: () => { s.viewed = new Set(["cell"]); R(); },
+        cap: "第一層:細胞——生命的最基本單位。神經細胞、肌肉細胞都是不同的細胞",
+        dur: 2800,
+      },
+      {
+        call: () => { s.viewed = new Set(["cell","tissue"]); R(); },
+        cap: "第二層:組織——形態相似、功能相同的細胞聚集成組織。例如肌肉組織",
+        dur: 2800,
+      },
+      {
+        call: () => { s.viewed = new Set(["cell","tissue","organ"]); R(); },
+        cap: "第三層:器官——多種組織組合成器官。例如心臟由肌肉+結締+神經組織構成",
+        dur: 2800,
+      },
+      {
+        call: () => { s.viewed = new Set(["cell","tissue","organ","system"]); R(); },
+        cap: "第四層:器官系統——功能相關的器官組成系統。例如消化系統=口腔+食道+胃+腸",
+        dur: 2800,
+      },
+      {
+        call: () => { s.viewed = new Set(["cell","tissue","organ","system","organism"]); R(); },
+        cap: "第五層:個體——所有系統協同運作,形成完整的生命體。五層全部認識了!",
+        dur: 3000,
+      },
+      {
+        call: () => { s.phase = "sort"; R(); },
+        cap: "現在試試看:把五個層次按從小到大排列正確!",
+        dur: 2000,
+      },
+    ];
+  },
+
+  controls(el) {
+    const s = this.state, lv = this;
+    const render = () => {
+      const allViewed = lv._CORRECT_ORDER.every(k => s.viewed.has(k));
+      if (s.phase === "cards") {
+        /* ── 卡片查閱區 ── */
+        const cards = lv._LEVELS.map((lv2, i) => {
+          const seen = s.viewed.has(lv2.key);
+          return `
+            <div class="s7a02-card${seen ? " seen" : ""}" data-key="${lv2.key}"
+              style="border:2px solid ${seen ? lv2.color : "#55648f"};border-radius:8px;
+                padding:8px 12px;margin:4px 0;cursor:pointer;
+                background:${seen ? `${lv2.color}18` : "var(--panel2)"};
+                transition:border-color .2s">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:1.4rem">${lv2.icon}</span>
+                <b style="color:${seen ? lv2.color : "var(--ink)"}">${lv2.name}</b>
+                ${seen ? `<span style="font-size:.75rem;color:${lv2.color}">✓ 已查閱</span>` : `<span style="font-size:.75rem;color:#9aa5c4">點擊查看</span>`}
+              </div>
+              ${seen ? `
+              <div style="margin-top:6px;font-size:.83rem;color:var(--ink)">
+                <div><b>定義:</b>${lv2.def}</div>
+                <div style="margin-top:3px;white-space:pre-line"><b>舉例:</b>${lv2.examples}</div>
+                <div style="margin-top:3px;color:#9aa5c4;font-size:.78rem">${lv2.note}</div>
+              </div>` : ""}
+            </div>`;
+        }).join("");
+        el.innerHTML = `
+          <div style="margin-bottom:6px;font-size:.85rem;color:#9aa5c4">點選每個層次查閱說明,全部查閱後可進行排列練習</div>
+          ${cards}
+          ${allViewed ? `<button class="primary" id="s7a02-to-sort" style="margin-top:8px;width:100%">進行層次排列練習 →</button>` : ""}
+        `;
+        el.querySelectorAll(".s7a02-card").forEach(card => {
+          card.onclick = () => {
+            s.viewed.add(card.dataset.key);
+            render();
+          };
+        });
+        const toSortBtn = el.querySelector("#s7a02-to-sort");
+        if (toSortBtn) toSortBtn.onclick = () => { s.phase = "sort"; render(); };
+      } else {
+        /* ── 排列練習區 ── */
+        const checkOrder = () => {
+          const correct = lv._CORRECT_ORDER;
+          return s.sortArr.every((k, i) => k === correct[i]);
+        };
+        const items = s.sortArr.map((key, i) => {
+          const item = lv._LEVELS.find(l => l.key === key);
+          return `
+            <div class="s7a02-sort-item" data-idx="${i}" data-key="${key}"
+              draggable="true"
+              style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin:4px 0;
+                border-radius:8px;border:2px solid ${s.sortDone && s.sortCorrect ? item.color : "#55648f"};
+                background:var(--panel2);cursor:grab;user-select:none;
+                ${s.sortDone ? "cursor:default;" : ""}">
+              <span style="font-size:1.2rem">${item.icon}</span>
+              <span style="font-weight:bold;color:${s.sortDone && s.sortCorrect ? item.color : "var(--ink)"}">${item.name}</span>
+              <span style="font-size:.78rem;color:#9aa5c4;flex:1;text-align:right">${item.def.slice(0, 18)}…</span>
+              ${!s.sortDone ? `<span style="color:#9aa5c4;font-size:.9rem">☰</span>` : ""}
+            </div>`;
+        }).join("");
+        el.innerHTML = `
+          <div style="margin-bottom:6px;font-size:.85rem;color:#9aa5c4">拖拉調整順序:從最小(細胞)到最大(個體)</div>
+          <div id="s7a02-sort-zone">${items}</div>
+          ${s.sortDone
+            ? (s.sortCorrect
+                ? `<div class="row"><b style="color:#4ade80">✓ 順序正確!五層層次全通關!</b></div>`
+                : `<div class="row"><b style="color:#ff5c7a">✗ 順序不對,再拖拉試試</b><button id="s7a02-sort-reset" style="margin-left:8px">重置</button></div>`)
+            : `<div class="row"><button class="primary" id="s7a02-check">確認順序</button><button id="s7a02-back-cards" style="margin-left:8px">回到卡片</button></div>`
+          }
+        `;
+
+        if (!s.sortDone) {
+          /* 拖放實作(PC + touch 用 click 換位) */
+          let dragSrcIdx = null;
+          el.querySelectorAll(".s7a02-sort-item").forEach(item => {
+            item.addEventListener("dragstart", e => {
+              dragSrcIdx = parseInt(item.dataset.idx);
+              e.dataTransfer.effectAllowed = "move";
+            });
+            item.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; });
+            item.addEventListener("drop", e => {
+              e.preventDefault();
+              const dstIdx = parseInt(item.dataset.idx);
+              if (dragSrcIdx === null || dragSrcIdx === dstIdx) return;
+              const arr = s.sortArr.slice();
+              const [moved] = arr.splice(dragSrcIdx, 1);
+              arr.splice(dstIdx, 0, moved);
+              s.sortArr = arr;
+              dragSrcIdx = null;
+              render();
+            });
+          });
+
+          const checkBtn = el.querySelector("#s7a02-check");
+          if (checkBtn) checkBtn.onclick = () => {
+            s.sortDone = true;
+            s.sortCorrect = checkOrder();
+            render();
+          };
+          const backBtn = el.querySelector("#s7a02-back-cards");
+          if (backBtn) backBtn.onclick = () => { s.phase = "cards"; render(); };
+          const resetBtn = el.querySelector("#s7a02-sort-reset");
+          if (resetBtn) resetBtn.onclick = () => {
+            s.sortDone = false; s.sortCorrect = false;
+            render();
+          };
+        } else {
+          const resetBtn2 = el.querySelector("#s7a02-sort-reset");
+          if (resetBtn2) resetBtn2.onclick = () => {
+            s.sortDone = false; s.sortCorrect = false;
+            render();
+          };
+        }
+      }
+    };
+    this._renderCtl = render;
+    render();
+  },
+
+  draw() {
+    const s = this.state;
+    const W = canvas.width, H = canvas.height;
+    g.fillStyle = TH.bg; g.fillRect(0, 0, W, H);
+
+    const levels = this._LEVELS;
+    const N = levels.length;
+    const yBase = H * 0.52;
+    const yStep = 50;
+    const xCenter = W * 0.5;
+
+    /* ── 金字塔層次圖 ── */
+    levels.slice().reverse().forEach((lv2, i) => {
+      const ri = N - 1 - i;   // 實際 level index(cell=0,organism=4)
+      const viewed = s.viewed.has(lv2.key);
+      const halfW = 60 + ri * 44;
+      const yTop = yBase - ri * yStep - 32;
+      const yBot = yBase - ri * yStep + 18;
+
+      /* 填色梯形 */
+      g.fillStyle = viewed ? `${lv2.color}28` : `${TH.gridFaint}`;
+      g.strokeStyle = viewed ? lv2.color : TH.axis;
+      g.lineWidth = viewed ? 2 : 1;
+      g.beginPath();
+      const topHW = halfW - 16, botHW = halfW;
+      g.moveTo(xCenter - topHW, yTop);
+      g.lineTo(xCenter + topHW, yTop);
+      g.lineTo(xCenter + botHW, yBot);
+      g.lineTo(xCenter - botHW, yBot);
+      g.closePath();
+      g.fill(); g.stroke();
+
+      /* 標籤 */
+      const textCol = viewed ? lv2.color : TH.dim;
+      pText(xCenter, (yTop + yBot) / 2 + 5, `${lv2.icon} ${lv2.name}`, textCol, 13, "center", true);
+    });
+
+    /* ── 箭頭(由下到上) ── */
+    for (let i = 0; i < N - 1; i++) {
+      const yMid = yBase - i * yStep;
+      const col = s.viewed.has(levels[i+1].key) ? levels[i+1].color : TH.gridFaint;
+      g.strokeStyle = col; g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(xCenter + 70 + i * 44 + 14, yMid - 8);
+      g.lineTo(xCenter + 70 + i * 44 + 14, yMid - 24);
+      g.stroke();
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(xCenter + 70 + i * 44 + 14, yMid - 30);
+      g.lineTo(xCenter + 70 + i * 44 + 8, yMid - 22);
+      g.lineTo(xCenter + 70 + i * 44 + 20, yMid - 22);
+      g.closePath();
+      g.fill();
+    }
+
+    /* ── 目標達成(在 draw 裡重試,等 player 停下來才過關) ── */
+    if (s.viewed.size === N) markGoal("S7A_02-a");
+    if (s.sortDone && s.sortCorrect) markGoal("S7A_02-b");
+
+    /* ── readout ── */
+    const viewedN = s.viewed.size;
+    readout.innerHTML = s.phase === "sort"
+      ? `拖拉排列:由小到大排列五個構造層次`
+      : `已查閱 <b>${viewedN}/${N}</b> 個層次`;
+  },
+};
+
+/* ================================================================
+   S7A_02_DRILL — S7A_02 段考題庫(構造層次)
+   知識點:細胞→組織→器官→器官系統→個體;動植物組織;器官系統
+   ================================================================ */
+const S7A_02_QUESTIONS = [
+  {
+    tid: "s7a_02_q1",
+    q: "生物體的構造層次,由小到大的正確順序是?",
+    opts: [
+      "A. 細胞 → 器官 → 組織 → 器官系統 → 個體",
+      "B. 細胞 → 組織 → 器官 → 器官系統 → 個體",
+      "C. 組織 → 細胞 → 器官 → 個體 → 器官系統",
+      "D. 細胞 → 組織 → 器官系統 → 器官 → 個體",
+    ],
+    ans: "B",
+    why: "正確順序(由小到大):細胞 → 組織 → 器官 → 器官系統 → 個體。",
+  },
+  {
+    tid: "s7a_02_q2",
+    q: "「由許多形態相似、功能相同的細胞聚集而成」,這段描述指的是哪個構造層次?",
+    opts: ["A. 器官", "B. 個體", "C. 組織", "D. 器官系統"],
+    ans: "C",
+    why: "組織的定義:形態相似、功能相同的細胞聚集而成。例如肌肉組織、上皮組織。",
+  },
+  {
+    tid: "s7a_02_q3",
+    q: "心臟是由多種不同組織組合而成,能執行特定功能,它屬於哪個構造層次?",
+    opts: ["A. 細胞", "B. 組織", "C. 器官", "D. 器官系統"],
+    ans: "C",
+    why: "心臟由肌肉組織、結締組織、神經組織等組成,能執行特定功能(幫浦血液),因此是器官層次。",
+  },
+  {
+    tid: "s7a_02_q4",
+    q: "「消化系統」包含口腔、食道、胃、小腸、大腸等,它屬於哪個構造層次?",
+    opts: ["A. 器官", "B. 器官系統", "C. 組織", "D. 個體"],
+    ans: "B",
+    why: "由多個功能相關的器官共同組成、完成某項生理功能,稱為器官系統;消化系統由多個消化器官組成。",
+  },
+  {
+    tid: "s7a_02_q5",
+    q: "下列哪一項不是動物常見的「組織」類型?",
+    opts: ["A. 肌肉組織", "B. 神經組織", "C. 輸導組織", "D. 結締組織"],
+    ans: "C",
+    why: "輸導組織是植物特有的組織(負責運輸水分與養分);動物的四大基本組織為上皮、肌肉、神經、結締組織。",
+  },
+  {
+    tid: "s7a_02_q6",
+    q: "植物的根、莖、葉、花分別屬於哪個構造層次?",
+    opts: ["A. 細胞", "B. 組織", "C. 器官", "D. 器官系統"],
+    ans: "C",
+    why: "根、莖、葉、花各自由多種組織組合而成,能執行特定功能(如葉進行光合作用),屬於器官層次。",
+  },
+  {
+    tid: "s7a_02_q7",
+    q: "下列關於「個體」的描述,哪一項是正確的?",
+    opts: [
+      "A. 個體是由多種器官系統組成的最高層次,能獨立生存",
+      "B. 個體就是器官系統的另一個名稱",
+      "C. 植物沒有個體層次",
+      "D. 個體是由單一器官所組成的",
+    ],
+    ans: "A",
+    why: "個體是由所有器官(或器官系統)協同運作形成的最高層次,能夠獨立生存與環境互動;動植物都有個體層次。",
+  },
+  {
+    tid: "s7a_02_q8",
+    q: "下列哪一項,是「植物」特有而動物沒有的組織類型?",
+    opts: ["A. 上皮組織", "B. 肌肉組織", "C. 保護組織", "D. 神經組織"],
+    ans: "C",
+    why: "保護組織是植物特有的組織,覆蓋在植物體表面(如表皮);上皮、肌肉、神經組織都是動物才有的組織類型。",
+  },
+  {
+    tid: "s7a_02_q9",
+    q: "生物體中構造層次的概念主要在說明什麼?",
+    opts: [
+      "A. 生物的演化歷史",
+      "B. 生物體內部的組織方式,從最基本的細胞到完整個體",
+      "C. 不同物種之間的親緣關係",
+      "D. 生物分類的依據",
+    ],
+    ans: "B",
+    why: "構造層次描述的是生物體的組成方式——從最基本的細胞,到組織、器官、器官系統,最後形成完整個體;不涉及演化或分類。",
+  },
+  {
+    tid: "s7a_02_q10",
+    q: "下列何者正確描述了「組織」和「器官」的差異?",
+    opts: [
+      "A. 組織由器官組成,器官由細胞組成",
+      "B. 組織由相似細胞組成;器官由多種組織組成",
+      "C. 組織和器官是同一個層次的不同說法",
+      "D. 器官的層次比個體還高",
+    ],
+    ans: "B",
+    why: "組織:由形態相似、功能相同的細胞聚集而成。器官:由多種不同組織組合而成,能執行特定功能。層次:組織 < 器官。",
+  },
+];
+
+const S7A_02_DRILL = makeStaticSciDrill(
+  "S7A_02D",
+  "構造層次段考練習",
+  "段考練習|S7A-2D:構造層次段考題庫",
+  `<p>本關模擬七上自然段考——<b>10 題</b>,涵蓋細胞→組織→器官→器官系統→個體的定義、舉例與辨別。</p><p>點選正確選項,答完後可看詳解與成績;答對率 ≥75% 解鎖通關。</p>`,
+  "完成段考練習且答對率 ≥75%(構造層次)",
+  S7A_02_QUESTIONS
+);
+
+/* ================================================================
    SCIENCE7A_REGISTRY — 供 main.js subject-loader 使用
    key = level id, value = 完整關卡物件(含 draw/demo/controls)
    ================================================================ */
 const SCIENCE7A_REGISTRY = {
   S7A_01,
+  S7A_01D: S7A_01_DRILL,
+  S7A_02,
+  S7A_02D: S7A_02_DRILL,
 };
 
 /* 科目定義:subject-loader 會讀這個全域 */
 window.__SUBJECT_SCIENCE7A__ = {
   subjectKey: "s7a",
   subjectName: "七上自然",
-  levels: [S7A_01],
+  levels: [S7A_01, S7A_01_DRILL, S7A_02, S7A_02_DRILL],
 };
