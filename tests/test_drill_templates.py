@@ -81,7 +81,7 @@ function tamperAns(ans) {
   // 分數型 n/d
   const fracM = s.match(/^(-?\d+)\/(\d+)$/);
   if (fracM) return `${parseInt(fracM[1]) + 1}/${fracM[2]}`;
-  // 不等式型 x<N / x>=N
+  // 不等式型 x<N / x>=N：方向翻轉
   if (/^x[<>]=?-?\d+$/.test(s)) {
     return s.replace(/[<>]=?/, op => {
       if (op === "<") return ">";
@@ -98,6 +98,21 @@ function tamperAns(ans) {
   if (simM) return `x=${parseInt(simM[1])+1},y=${simM[2]}`;
   // 質因數 / 象限 / |N| / 一樣大 / 其他字串 → 固定錯答案
   return "__WRONG__";
+}
+
+/* ── T5b 開閉互換竄改（方向不變，只改 < ↔ ≤、> ↔ ≥） ── */
+function tamperIneqOpenClose(ans) {
+  const s = String(ans);
+  // 不等式型 xOPN / x≤N 等（含 unicode ≤ ≥）
+  return s
+    .replace(/x<=/g, "x<PLACEHOLDER_STRICT_LT")
+    .replace(/x>=/g, "x>PLACEHOLDER_STRICT_GT")
+    .replace(/x</g, "x<=")
+    .replace(/x>/g, "x>=")
+    .replace(/x<PLACEHOLDER_STRICT_LT/g, "x<")
+    .replace(/x>PLACEHOLDER_STRICT_GT/g, "x>")
+    .replace(/x≤/g, "x<")   // normIneq 轉換後的 unicode 形式
+    .replace(/x≥/g, "x>");
 }
 
 /* ── 主驗算迴圈 ── */
