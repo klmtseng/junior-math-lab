@@ -301,15 +301,16 @@ const DRILL_TEMPLATES = [
     tid: "b1_linear_eq",
     book: "b1",
     gen(rng) {
-      // ax + b = c，整數解
+      // ax + b = c，整數解；排除 a=1&&b=0（題目退化為 x = c，答案在題幹裡）
       const x = Math.floor(rng() * 15) - 7;  // -7..7
-      const a = Math.floor(rng() * 4) + 1;    // 1..4
-      const b = Math.floor(rng() * 11) - 5;   // -5..5
+      let a = Math.floor(rng() * 4) + 1;    // 1..4
+      let b = Math.floor(rng() * 11) - 5;   // -5..5
+      // 守衛：a=1 且 b=0 時退化，把 b 改為 1（仍在範圍內）
+      if (a === 1 && b === 0) b = 1;
       const c = a * x + b;
-      const bStr = b < 0 ? `(${b})` : `+ ${b}`;
       const bFmt = b === 0 ? "" : (b < 0 ? ` - ${Math.abs(b)}` : ` + ${b}`);
       const q = `解方程式：${a === 1 ? "" : a}x${bFmt} = ${c}，x = ?`;
-      const why = `兩邊${b !== 0 ? `各${b > 0 ? "減" : "加"} ${Math.abs(b)}，得 ${a}x = ${c - b}；` : ""}${a !== 1 ? `兩邊除以 ${a}，得 ` : ""}x = ${c - b} ÷ ${a} = ${x}。`;
+      const why = `${b !== 0 ? `兩邊各${b > 0 ? "減" : "加"} ${Math.abs(b)}，得 ${a}x = ${c - b}；` : ""}${a !== 1 ? `兩邊除以 ${a}，得 ` : ""}x = ${c - b} ÷ ${a} = ${x}。`;
       return {
         q, ans: String(x), why,
         check: (r) => {
@@ -400,7 +401,8 @@ const DRILL_TEMPLATES = [
         const cost2 = price * qty2;
         const q = `一個文具售價 ${price} 元，買 ${qty1} 個要 ${cost1} 元；同樣單價，買 ${qty2} 個要多少元？`;
         const ans = cost2;
-        const why = `單價 ${price} 元，${qty2} 個 = ${price} × ${qty2} = ${ans} 元。（正比：qty 翻 ${qty2/qty1} 倍，費用也翻 ${qty2/qty1} 倍）`;
+        const _ratio = fracStr(qty2, qty1);
+        const why = `單價 ${price} 元，${qty2} 個 = ${price} × ${qty2} = ${ans} 元。（正比：qty 翻 ${_ratio} 倍，費用也翻 ${_ratio} 倍）`;
         return {
           q, ans: String(ans), why,
           check: (r) => {
@@ -562,7 +564,7 @@ const DRILL_TEMPLATES = [
       if (rem !== 0) vals[n-1] += n - rem;
       const total2 = vals.reduce((s, v) => s + v, 0);
       const avg = total2 / n;
-      const scenes = ["某班 {n} 位同學的數學成績", "5 天的氣溫（度）", "{n} 位選手的跳遠成績（cm）", "每週 {n} 天的零用錢（元）"];
+      const scenes = ["某班 {n} 位同學的數學成績", "{n} 天的氣溫（度）", "{n} 位選手的跳遠成績（cm）", "每週 {n} 天的零用錢（元）"];
       const scene = scenes[Math.floor(rng() * scenes.length)].replace("{n}", n);
       const q = `${scene}分別為：${vals.join("、")}，平均數是多少？`;
       const why = `總和 = ${vals.join(" + ")} = ${total2}；平均 = ${total2} ÷ ${n} = ${avg}。`;

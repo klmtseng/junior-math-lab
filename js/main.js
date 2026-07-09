@@ -329,7 +329,7 @@ const JH_LEVELS = [
 {
   id: "J1", short: "數線負數", title: "關 1|負數:在數線上走路", ep: "J", subj: "jh",
   intro: `<p>國一第一個大魔王就是<b>負數</b>。祕訣只有一句:<b>加=往右走,減=往左走;遇到負號就轉身</b>。所以「加負 5」= 轉身往左走 5 步;「減負 6」= 轉兩次身,還是往右走 6 步。</p><p>把數線上的小圓點<b>拖到題目的答案位置</b>。用走路的方式在腦中算,不要背規則。</p>`,
-  formal: `<p class="math">a + (−b) = a − b;a − (−b) = a + b。數線模型:加法 = 向右位移,加負數 = 向左位移;減去一個數 = 加上它的相反數。</p>`,
+  formal: `<p class="math">a + (−b) = a − b;a − (−b) = a + b。數線模型:加法 = 向右位移,加負數 = 向左位移;減去一個數 = 加上它的相反數。起點是負數時,一樣從那個點開始往左或往右走(例如 (−4) − (−6) 從 −4 出發,往右走 6 步到 2)。</p>`,
   goals: [
     { id: "J1-a", text: "第 1 題:把點拖到 3 + (−5) 的位置" },
     { id: "J1-b", text: "第 2 題:把點拖到 (−4) − (−6) 的位置" },
@@ -1044,21 +1044,20 @@ const J8 = {
 /* ─── J9:統計圖表「數據偵探」 ─── */
 const J9 = {
   id: "J9", short: "數據偵探", title: "關 9|統計:拖動數據,看平均數與長條圖即時變", ep: "J", subj: "jh",
-  intro: `<p>統計圖表不是靜止的——<b>每個資料點都影響平均數和長條高度</b>。把數據點拖上拖下,觀察平均線跟著移動,找出那個「跑太遠」的離群值。</p><p>完成兩個任務:把平均數拖到目標值,再找出離群值並消除它(拖到第 0 格)。</p>`,
-  formal: `<p class="math">算術平均數 = 各資料加總 ÷ 資料個數。離群值:距離平均數明顯偏高或偏低的資料點(直觀判斷)。</p>`,
+  intro: `<p>統計圖表不是靜止的——<b>每個資料點都影響平均數和長條高度</b>。把數據點拖上拖下,觀察平均線跟著移動。</p><p>完成兩個任務:(a) 把某一個數據點拖到很大,看一筆極端值怎麼把平均線往上拉;(b) 再把那個離群值拖回和其他數字差不多的範圍,平均就回到中間了。</p>`,
+  formal: `<p class="math">算術平均數 = 各資料加總 ÷ 資料個數。離群值:距離其他資料明顯偏高或偏低的資料點——一筆極端值就能把平均數大幅拉偏。</p>`,
   goals: [
-    { id: "J9-a", text: "把 5 筆資料的平均數調整到恰好等於 6" },
-    { id: "J9-b", text: "找出離群值並把它歸零(使其不影響平均)" },
+    { id: "J9-a", text: "把某一個數據點拖到很大(≥ 14),觀察一筆極端值把平均往上拉" },
+    { id: "J9-b", text: "再把那個離群值拖回和其他點差不多的範圍(全距 ≤ 4),平均回到中間" },
   ],
-  // 5 個資料值,可拖;目標平均=6;第 3 筆初始為超大離群值
-  state: { vals: [5, 6, 7, 6, 5], outlierZeroed: false },
-  enter() { Object.assign(this.state, { vals: [5, 6, 14, 6, 5], outlierZeroed: false }); },
+  // 5 個資料值,可拖;初始全距小、無離群值——保證 enter() 時兩目標都不滿足
+  state: { vals: [5, 6, 5, 6, 5], outlierSeen: false },
+  enter() { Object.assign(this.state, { vals: [5, 6, 5, 6, 5], outlierSeen: false }); },
   _mean() { const s = this.state; return s.vals.reduce((a, b) => a + b, 0) / s.vals.length; },
   demo() { const s = this.state; return [
-    { call: () => { s.vals = [5, 6, 7, 6, 5]; }, cap: "這 5 條長條代表 5 個資料;紅線是平均數", dur: 2600 },
-    { cap: "把第 3 條拖高:你看,平均線也往上移了!每個值都影響平均", dur: 2600 },
-    { call: () => { s.vals = [5, 6, 14, 6, 5]; }, cap: "這一筆跑到 14——它叫離群值,讓平均嚴重偏高", dur: 2800 },
-    { call: () => { s.vals = [5, 6, 7, 6, 5]; }, cap: "把離群值拖回 0,平均就正常了。換你操作!", dur: 2200 },
+    { call: () => { s.vals = [5, 6, 5, 6, 5]; s.outlierSeen = false; }, cap: "這 5 條長條代表 5 個資料;黃線是平均數", dur: 2600 },
+    { call: () => { s.vals = [5, 6, 14, 6, 5]; }, cap: "把第 3 條拖高到 14——它叫離群值,讓平均嚴重偏高", dur: 2800 },
+    { call: () => { s.vals = [5, 6, 5, 6, 5]; }, cap: "再把離群值拖回和其他點差不多的範圍,平均就回到中間。換你操作!", dur: 2200 },
   ]; },
   draggables() {
     const s = this.state;
@@ -1075,12 +1074,10 @@ const J9 = {
     const s = this.state;
     const BAR_X0 = 120, BAR_W = 60, GAP = 16, BAR_Y0 = 440, SC = 26;
     const mean = this._mean();
-    const targetMean = 6;
-    const meanOk = Math.abs(mean - targetMean) < 0.05;
     // 長條
     s.vals.forEach((v, k) => {
       const bx = BAR_X0 + k * (BAR_W + GAP);
-      const isOutlier = v >= 12;
+      const isOutlier = v >= 14;
       g.fillStyle = isOutlier ? "rgba(255,92,122,.55)" : "rgba(56,189,248,.55)";
       if (v > 0) g.fillRect(bx, BAR_Y0 - v * SC, BAR_W, v * SC);
       g.strokeStyle = isOutlier ? "#ff5c7a" : "#38bdf8"; g.lineWidth = 2;
@@ -1092,22 +1089,20 @@ const J9 = {
     });
     // 平均線
     const meanY = BAR_Y0 - mean * SC;
-    g.strokeStyle = meanOk ? "#4ade80" : "#fbbf24"; g.lineWidth = 2.5; g.setLineDash([8, 5]);
+    g.strokeStyle = "#fbbf24"; g.lineWidth = 2.5; g.setLineDash([8, 5]);
     g.beginPath(); g.moveTo(BAR_X0 - 16, meanY); g.lineTo(BAR_X0 + 5 * (BAR_W + GAP), meanY); g.stroke();
     g.setLineDash([]);
-    pText(BAR_X0 + 5 * (BAR_W + GAP) + 6, meanY + 5, `平均=${fmt(mean)}`, meanOk ? "#4ade80" : "#fbbf24", 14, "left", true);
-    // 目標線
-    const tgtY = BAR_Y0 - targetMean * SC;
-    g.strokeStyle = TH.dim; g.lineWidth = 1.5; g.setLineDash([4, 4]);
-    g.beginPath(); g.moveTo(BAR_X0 - 16, tgtY); g.lineTo(BAR_X0 + 5 * (BAR_W + GAP), tgtY); g.stroke();
-    g.setLineDash([]);
-    pText(BAR_X0 - 18, tgtY + 5, "目標 6", TH.dim, 13, "right");
+    pText(BAR_X0 + 5 * (BAR_W + GAP) + 6, meanY + 5, `平均=${fmt(mean)}`, "#fbbf24", 14, "left", true);
     pText(340, 120, "拖動黃點調整各筆資料", TH.text, 20, "center", true);
-    // 離群值偵測
-    const hasLarge = s.vals.some((v) => v >= 12);
-    if (meanOk) markGoal("J9-a");
-    if (!hasLarge && s.vals.reduce((a, b) => a + b, 0) > 0) markGoal("J9-b");
-    readout.innerHTML = `平均 <b>${fmt(mean)}</b>　目標 6${meanOk ? "　<b style='color:#4ade80'>平均達標!</b>" : ""}${hasLarge ? "　⚠ 有離群值(紅色)!把它拖到 0" : ""}`;
+    // 離群值偵測:有一筆 ≥ 14 就視為製造了極端值
+    const hasLarge = s.vals.some((v) => v >= 14);
+    if (hasLarge) { s.outlierSeen = true; markGoal("J9-a"); }
+    // J9-b:曾製造過離群值,且現在全距 ≤ 4(所有點都回到相近範圍)
+    const vMax = Math.max(...s.vals), vMin = Math.min(...s.vals);
+    const spread = vMax - vMin;
+    if (s.outlierSeen && spread <= 4) markGoal("J9-b");
+    const outlierMsg = hasLarge ? "　⚠ 發現離群值(紅色)!平均被往上拉了" : (s.outlierSeen ? "　離群值已拖回正常範圍,平均回中間了!" : "");
+    readout.innerHTML = `平均 <b>${fmt(mean)}</b>　全距 ${spread}${outlierMsg}`;
   },
 };
 
@@ -1115,7 +1110,7 @@ const J9 = {
 const J10 = {
   id: "J10", short: "鏡子與積木", title: "關 10|對稱與視圖:鏡子對折與積木三視圖", ep: "J", subj: "jh",
   intro: `<p><b>線對稱</b>:把圖形沿一條直線對折,兩半完全重疊——那條線叫對稱軸。<b>三視圖</b>:從正面、側面、上方三個方向看同一個立體,各畫一張平面圖。</p><p>前半:拖對稱軸位置,找出哪個圖形有反射點落在軸上;後半:從三張視圖選出正確的積木堆。</p>`,
-  formal: `<p class="math">線對稱:P 與其鏡像 P' 的連線垂直平分對稱軸。三視圖(正視圖/側視圖/俯視圖)是立體幾何的「說明書」。</p>`,
+  formal: `<p class="math">線對稱:對稱軸是 P 與其鏡像 P' 連線的垂直平分線(軸垂直平分 PP',並通過其中點)。三視圖(正視圖/側視圖/俯視圖)是立體幾何的「說明書」。</p>`,
   goals: [
     { id: "J10-a", text: "把對稱軸拖到正確位置,使兩個標記點關於軸對稱" },
     { id: "J10-b", text: "選出符合三視圖的正確積木堆" },
@@ -1146,7 +1141,7 @@ const J10 = {
         ];
         el.innerHTML = `<div class="row quiz-msg">根據三視圖,哪個積木堆正確?</div>` +
           opts.map((o) => `<button class="quiz-opt${s.chosen === o.id ? (o.id === "A" ? " right" : " wrong") : ""}" data-id="${o.id}">${o.label}</button>`).join("") +
-          `<div id="j10msg" class="quiz-msg">${s.chosen ? (s.chosen === "A" ? "✓ 正確!A 是 L 型積木——正/側/俯視圖全符合" : "✗ 再想想:對照正視圖是兩格高、側視圖是兩格深") : ""}</div>`;
+          `<div id="j10msg" class="quiz-msg">${s.chosen ? (s.chosen === "A" ? "✓ 正確!A 是 L 型積木——正/側/俯視圖全符合" : "✗ 再想想:對照正視圖是兩格高、側視圖是兩格高、俯視圖顯示深度") : ""}</div>`;
         el.querySelectorAll(".quiz-opt").forEach((btn) => {
           btn.onclick = () => {
             if (s.chosen) return; // 已選不重選
