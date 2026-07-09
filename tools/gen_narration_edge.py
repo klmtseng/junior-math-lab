@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """edge-tts 台灣腔旁白生成器(zh-TW-HsiaoChenNeural)。
 用法:
-  python3 tools/gen_narration_edge.py [--subject science7a] [--ids S7A_01,S7A_02] [--force]
+  python3 tools/gen_narration_edge.py [--subject science7a|math7] [--ids S7A_01,S7A_02] [--force]
 
-讀 captions_<subject>.json → 用 edge-tts 產 mp3 → 覆蓋 audio/<ID>_<i>.mp3
+  --subject science7a  讀 tools/captions_science7a.json(預設)
+  --subject math7      讀 tools/captions.json(數學旁白,套用 edge_norm 極簡正規化)
+
+讀 captions JSON → 用 edge-tts 產 mp3 → 覆蓋 audio/<ID>_<i>.mp3
 """
 import asyncio, json, os, sys, subprocess, tempfile, time
 
@@ -16,6 +19,15 @@ try:
 except ImportError:
     print("請先安裝 edge-tts: pip install edge-tts", file=sys.stderr)
     sys.exit(1)
+
+
+def edge_norm(text: str) -> str:
+    """數學字幕極簡正規化:只轉 edge-tts 無法自然發音的符號。
+    絕對不套用 Kokoro say() 的轉換(x→艾克斯等),edge-tts zh-TW 原生正確。
+    """
+    text = text.replace("=", " 等於 ")
+    text = text.replace("×", " 乘以 ")
+    return text
 
 async def synth_one(text: str, out_mp3: str, retries: int = 3) -> bool:
     """用 edge-tts 合成一段文字,成功回 True。"""
@@ -67,10 +79,19 @@ async def main():
         if idx + 1 < len(sys.argv):
             filter_ids = set(sys.argv[idx + 1].split(","))
 
-    cap_file = os.path.join(HERE, "tools", f"captions_{subject}.json")
+    # math7: 讀 captions.json(不帶科目後綴);其餘讀 captions_<subject>.json
+    if subject == "math7":
+        cap_file = os.path.join(HERE, "tools", "captions.json")
+        use_math_norm = True
+    else:
+        cap_file = os.path.join(HERE, "tools", f"captions_{subject}.json")
+        use_math_norm = False
+
     if not os.path.exists(cap_file):
         print(f"找不到 {cap_file}", file=sys.stderr)
         sys.exit(1)
+
+    print(f"[gen_narration_edge] subject={subject}, voice={VOICE}, captions={cap_file}, force={force}")
 
     caps = json.load(open(cap_file, encoding="utf-8"))
     outdir = os.path.join(HERE, "audio")
@@ -86,8 +107,10 @@ async def main():
             skipped += 1
             print(f"  skip {key} (exists)")
             continue
-        print(f"  synth {key}: {c['cap'][:50]}")
-        ok = await synth_one(c["cap"], mp3)
+        # 數學字幕套極簡正規化;自然科原文直送
+        text = edge_norm(c["cap"]) if use_math_norm else c["cap"]
+        print(f"  synth {key}: {text[:60]}")
+        ok = await synth_one(text, mp3)
         if ok:
             vol = volumedetect(mp3)
             print(f"    -> {mp3}  {vol}")

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# 已停用:數學旁白(captions.json)改用 gen_narration_edge.py 台灣腔 --subject math7(2026-07-10)
+# 本檔保留供參考,自然科 science7a 路徑亦已移至 gen_narration_edge.py。
 """數感實驗室示範旁白生成器(雙引擎:中文=edge-tts 曉臻台灣腔 / 英文=Kokoro zf_xiaoxiao)。
 用法:
   # 預設:科目含 science → edge-tts 曉臻;其餘(數學) → Kokoro

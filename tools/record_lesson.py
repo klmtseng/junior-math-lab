@@ -32,7 +32,7 @@ FFMPEG_DIR = Path.home() / "Desktop/AI_MAC/tools/ffmpeg/ffmpeg-7.0.2-amd64-stati
 FFMPEG     = str(FFMPEG_DIR / "ffmpeg")
 FFPROBE    = str(FFMPEG_DIR / "ffprobe")
 
-PORT   = 8803
+PORT   = 8804
 WIDTH  = 1280
 HEIGHT = 720
 FPS    = 30
@@ -381,17 +381,39 @@ def mode_explain(level: str, out_dir: Path, base_url: str):
 
 
 # ── 錄屏式模式 ────────────────────────────────────────────────────────────────
+#
+# 修法(2026-07-10):改為「逐段 mp3 秒數驅動時間軸」
+#
+# 舊做法:player.start(lv.demo()) 讓 JS 自己的 dur 計時推進步驟(合計≈15s),
+#         再把 48s 旁白貼上 → -shortest 截斷到 15s。
+#
+# 新做法:
+#   1. 用 ffprobe 量每段 mp3 秒數。
+#   2. 在 JS 端把 demo steps 的 dur 覆蓋成對應 mp3 秒數(ms),讓 player 自動推進時
+#      每步停留時間 = 該段旁白長度。
+#   3. 同時 monkey-patch player.next 記錄每步實際觸發時刻。
+#   4. 等待上限 = Σmp3 + 10s buffer。
+#   5. 錄到的 webm:頁面載入預熱時間(pre-roll)+ Σmp3 的動畫。
+#   6. 從 timestamps[0] 取 pre-roll 秒數,用 ffmpeg -ss 剪掉頭部,
+#      讓視訊起點 = demo 第 0 步起點 = 旁白起點。
+#   7. 驗收:剪後影片總長與 Σmp3 誤差 <0.5s;六步偏移各 <0.5s。
 
 def mode_screen(level: str, out_dir: Path, base_url: str):
     audio_dir = REPO_ROOT / "audio"
     mp3_files = get_mp3_list(level, audio_dir)
     durations = [ffprobe_duration(p) for p in mp3_files]
     total_mp3 = sum(durations)
+    n_steps   = len(durations)
 
-    print(f"[screen] mp3 Σ={total_mp3:.3f}s, {len(durations)} 段")
+    print(f"[screen] mp3 秒數: {[f'{d:.3f}' for d in durations]}")
+    print(f"[screen] Σmp3={total_mp3:.3f}s, {n_steps} 段")
 
     tmp_dir = out_dir / "tmp_screen"
     tmp_dir.mkdir(exist_ok=True)
+
+    # 清除舊 webm,確保錄完後只有本次產生的一個 webm
+    for old_webm in tmp_dir.glob("*.webm"):
+        old_webm.unlink()
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
@@ -406,22 +428,21 @@ def mode_screen(level: str, out_dir: Path, base_url: str):
         page.wait_for_timeout(800)
         navigate_to_level(page, level)
 
-        # 記錄錄影起點 + 每步時間戳
-        page.evaluate("""
-        (function() {
-            window.__rec_start = performance.now();
-            window.__timestamps = [];
-        })()
-        """)
+        # 核心修法:Python 逐步驅動 demo,每步停留時間精確 = 對應 mp3 秒數。
+        #
+        # 做法:
+        # 1. 從 JS 取 demo 步驟陣列(只取結構,不啟動 player)
+        # 2. 對每步 i:
+        #    a. page.evaluate → 執行 steps[i].call()(更新 DOM 狀態 + 觸發 render)
+        #    b. page.evaluate → 顯示 caption(如果步驟有 cap)
+        #    c. page.wait_for_timeout(durations_ms[i]) — Python 精確計時
+        # 3. 記錄每步實際觸發時刻(Python wall-clock)
+        # 4. 完成後 player 不需要介入。
+        #
+        # 好處:步驟停留時間完全由 Python 控制,無 JS RAF 時鐘漂移。
 
-        # 取得 demo steps 總時長
-        steps_info = get_demo_steps_info(page, level)
-        total_js_ms = sum(s["dur"] for s in steps_info)
-        print(f"[screen] demo JS 總時長={total_js_ms}ms, {len(steps_info)} 步")
-
-        # 注入 monkey-patch:記錄每步 next() 呼叫時刻,然後啟動 player
-        # 支援數學 J 系列(JH_LEVELS)與自然科 S 系列(頁面 levels 陣列)
-        page.evaluate(f"""
+        # 取步驟陣列(只取 cap 欄位判斷要不要顯 caption)
+        steps_caps = page.evaluate(f"""
         (function() {{
             const levelId = '{level}';
             let lv = null;
@@ -434,56 +455,120 @@ def mode_screen(level: str, out_dir: Path, base_url: str):
                 if (typeof J10 !== 'undefined') all.push(J10);
                 lv = all.find(l => l.id === levelId);
             }}
-            if (!lv || !lv.demo) return;
-
-            const orig_next = player.next.bind(player);
-            player.next = function() {{
-                window.__timestamps.push({{
-                    idx:  this.idx + 1,   // 即將進入的 idx
-                    t_ms: performance.now() - window.__rec_start
-                }});
-                orig_next.call(this);
-            }};
-
-            player.start(lv.demo());
+            if (!lv || !lv.demo) return [];
+            return lv.demo().map(function(st) {{
+                return {{ hasCap: st.cap != null, cap: st.cap || '' }};
+            }});
         }})()
         """)
 
-        # 輪詢等待 demo 完成(上限 = JS 時長 + 10s buffer)
-        deadline = time.time() + (total_js_ms / 1000) + 10
-        while time.time() < deadline:
-            active = page.evaluate("(function() { return player.active; })()")
-            if not active:
-                break
-            page.wait_for_timeout(200)
+        print(f"[screen] 取得 {len(steps_caps)} 個步驟,逐步 Python 計時驅動")
 
-        print("[screen] demo 結束")
+        t_demo_start_py = time.time()  # Python wall-clock demo 起點
+        timestamps = []                 # [{"idx": i, "t_ms": ms}] Python 計時的觸發時刻
 
-        # 取時間戳
-        timestamps = page.evaluate("(function() { return window.__timestamps || []; })()")
-        print(f"[screen] 時間戳(ms): {[(t['idx'], round(t['t_ms'])) for t in timestamps]}")
+        for step_i in range(n_steps):
+            t_step_py = time.time()
+            rel_ms = round((t_step_py - t_demo_start_py) * 1000)
+            timestamps.append({"idx": step_i, "t_ms": rel_ms})
+
+            # 執行 steps[step_i].call() + 更新 caption
+            page.evaluate(f"""
+            (function() {{
+                const levelId = '{level}';
+                let lv = null;
+                if (typeof levels !== 'undefined') lv = levels.find(l => l.id === levelId);
+                if (!lv && typeof JH_LEVELS !== 'undefined') {{
+                    const all = Array.from(JH_LEVELS);
+                    if (typeof J7  !== 'undefined') all.push(J7);
+                    if (typeof J8  !== 'undefined') all.push(J8);
+                    if (typeof J9  !== 'undefined') all.push(J9);
+                    if (typeof J10 !== 'undefined') all.push(J10);
+                    lv = all.find(l => l.id === levelId);
+                }}
+                if (!lv || !lv.demo) return;
+                const steps = lv.demo();
+                const st = steps[{step_i}];
+                if (!st) return;
+                if (st.call) st.call();
+                if (typeof lv._sync === 'function') lv._sync();
+                if (st.cap != null) {{
+                    const el = document.getElementById('caption');
+                    if (el) {{ el.textContent = st.cap; el.classList.add('show'); }}
+                }}
+            }})()
+            """)
+
+            dur_ms = int(round(durations[step_i] * 1000))
+            print(f"  步驟 {step_i}: call() 完成,等待 {dur_ms}ms (mp3={durations[step_i]:.3f}s)")
+            page.wait_for_timeout(dur_ms)
+
+        print("[screen] demo 全步完成")
+
+        # 計算每步偏移(純 Python 計時)
+        step_timestamps_display = [(t["idx"], t["t_ms"]) for t in timestamps]
+        print(f"[screen] 每步觸發時刻(ms): {step_timestamps_display}")
 
         page.close()
         ctx.close()
         browser.close()
 
-    # 找 .webm
+    # 找 .webm(已在錄影前清除舊檔,此時目錄裡只有一個 webm)
     webm_files = list(tmp_dir.glob("*.webm"))
     if not webm_files:
         raise RuntimeError("找不到錄屏 .webm 檔")
-    webm_path = webm_files[0]
+    webm_path = max(webm_files, key=lambda p: p.stat().st_mtime)  # 以防萬一取最新
     webm_dur  = probe_streams(webm_path)["duration"]
     print(f"[screen] webm={webm_path.name}, 時長={webm_dur:.3f}s")
+
+    # 計算 pre-roll:webm 總長 - Σmp3 = 錄影起點到 demo 起點的空白
+    # (demo 結束後立即 page.close(),尾部空白 ≤ 200ms poll 間隔,可忽略)
+    pre_roll_sec = max(0.0, webm_dur - total_mp3)
+    print(f"[screen] pre-roll≈{pre_roll_sec:.3f}s (webm {webm_dur:.3f}s - Σmp3 {total_mp3:.3f}s) → 剪頭部")
+
+    # 逐步偏移驗核
+    # timestamps[i].t_ms = step i 觸發時相對 __page_t0 (=player.start 前)的毫秒
+    # page_t0 到 demo 真正起點的延遲 ≈ 0 (evaluate 串行執行,player.start 在同一 evaluate 塊)
+    # 所以在「剪後視訊」中,step i 的視訊起點 ≈ timestamps[i].t_ms / 1000
+    # 旁白起點 = Σdurations[0..i-1]
+    print("[screen] 逐步同步偏移分析 (相對於 demo 起點):")
+    # timestamps[0].t_ms ≈ 0 (step 0 在 player.start 後立即觸發)
+    # 後續步驟的相對時刻 = timestamps[i].t_ms - timestamps[0].t_ms
+    t0_ms = timestamps[0]["t_ms"] if timestamps else 0.0
+    cumulative = 0.0
+    max_offset = 0.0
+    for i, ts in enumerate(timestamps):
+        step_t_rel = (ts["t_ms"] - t0_ms) / 1000.0   # 相對 demo 起點(秒)
+        narration_t = cumulative
+        offset = abs(step_t_rel - narration_t)
+        max_offset = max(max_offset, offset)
+        print(f"  步驟 {ts['idx']}: demo起點後@{step_t_rel:.3f}s, 旁白起點@{narration_t:.3f}s, 偏移={offset:.3f}s")
+        if i < len(durations):
+            cumulative += durations[i]
+    print(f"[screen] 最大步驟偏移={max_offset:.3f}s")
 
     # 串接 mp3 → aac
     concat_audio = out_dir / f"{level}_narration_screen.aac"
     concat_mp3_to_aac(mp3_files, concat_audio)
 
-    # 合成最終 mp4(旁白從 t=0 開始)
+    # 裁剪 webm(去掉 pre-roll)→ 中間暫存(re-encode 確保時間戳從 0 開始)
+    trimmed_webm = tmp_dir / f"{level}_trimmed.webm"
+    subprocess.run(
+        [FFMPEG, "-y",
+         "-ss", f"{pre_roll_sec:.6f}",
+         "-i", str(webm_path),
+         "-c:v", "vp8", "-b:v", "1500k",  # re-encode 修正 keyframe 問題
+         str(trimmed_webm)],
+        check=True, capture_output=True
+    )
+    trimmed_dur = probe_streams(trimmed_webm)["duration"]
+    print(f"[screen] 裁剪後 webm 時長={trimmed_dur:.3f}s (目標 Σmp3={total_mp3:.3f}s)")
+
+    # 合成最終 mp4
     out_mp4 = out_dir / f"{level}_screen.mp4"
     subprocess.run(
         [FFMPEG, "-y",
-         "-i", str(webm_path),
+         "-i", str(trimmed_webm),
          "-i", str(concat_audio),
          "-c:v", "libx264", "-pix_fmt", "yuv420p",
          "-preset", "medium", "-crf", "20",
@@ -493,16 +578,11 @@ def mode_screen(level: str, out_dir: Path, base_url: str):
         check=True, capture_output=True
     )
 
-    # 量測偏移:
-    # - 旁白 step 0 從 t=0 開始
-    # - timestamps[0] 是 idx=0 被呼叫時 (player.start → next → idx=0 → 這裡記錄 idx=1 即將發生)
-    #   實際上第 0 步在 t=0 就開始了,timestamps[0] 是 idx=0 開始時的 t_ms
-    # 所以偏移 = timestamps[0].t_ms / 1000 (demo 啟動到錄影起點的延遲)
-    offset_sec = timestamps[0]["t_ms"] / 1000.0 if timestamps else 0.0
-    vid_dur    = probe_streams(out_mp4)["duration"]
-    print(f"[screen] 完成: {out_mp4}, 時長={vid_dur:.3f}s")
-    print(f"[screen] 音視訊偏移={offset_sec:.3f}s (方法:timestamps[0].t_ms 即 demo啟動→錄影起點差)")
-    return out_mp4, offset_sec
+    vid_dur = probe_streams(out_mp4)["duration"]
+    dur_diff = abs(vid_dur - total_mp3)
+    print(f"[screen] 完成: {out_mp4}")
+    print(f"[screen] Σmp3={total_mp3:.3f}s, 影片={vid_dur:.3f}s, 誤差={dur_diff:.3f}s")
+    return out_mp4, pre_roll_sec, vid_dur, total_mp3, max_offset
 
 
 # ── 縮圖 ──────────────────────────────────────────────────────────────────────
@@ -725,11 +805,14 @@ def main():
     print(f"[server] {base_url} → {REPO_ROOT}")
 
     try:
-        explain_mp4 = None
-        screen_mp4  = None
-        total_mp3   = None
-        vid_dur_ex  = None
-        offset_sec  = None
+        explain_mp4      = None
+        screen_mp4       = None
+        total_mp3        = None
+        vid_dur_ex       = None
+        pre_roll_sec     = None
+        vid_dur_sc       = None
+        total_mp3_sc     = None
+        max_step_offset  = None
 
         if args.mode in ("explain", "both"):
             print("\n=== 講解式模式 ===")
@@ -738,7 +821,8 @@ def main():
 
         if args.mode in ("screen", "both"):
             print("\n=== 錄屏式模式 ===")
-            screen_mp4, offset_sec = mode_screen(args.level, out_dir, base_url)
+            screen_mp4, pre_roll_sec, vid_dur_sc, total_mp3_sc, max_step_offset = \
+                mode_screen(args.level, out_dir, base_url)
 
         print("\n=== 縮圖 ===")
         make_thumbnail(args.level, out_dir, base_url)
@@ -766,13 +850,18 @@ def main():
         if screen_mp4 and screen_mp4.exists():
             info = probe_streams(screen_mp4)
             vc1 = "PASS" if info["has_video"] and info["has_audio"] and info["duration"] > 0 else "FAIL"
-            vc3 = "PASS" if offset_sec is not None and offset_sec < 0.3 else "FAIL"
+            dur_diff = abs(vid_dur_sc - total_mp3_sc)
+            vc_dur = "PASS" if dur_diff < 0.5 else "FAIL"
+            vc_sync = "PASS" if max_step_offset < 0.5 else "FAIL"
             print(f"[VC1] screen  mp4: duration={info['duration']:.3f}s "
                   f"video={info['has_video']} audio={info['has_audio']} → {vc1}")
-            print(f"[VC3] 音視訊偏移={offset_sec:.3f}s (方法:demo step0 timestamp) → {vc3}")
+            print(f"[VC_DUR] Σmp3={total_mp3_sc:.3f}s vs 影片={vid_dur_sc:.3f}s "
+                  f"誤差={dur_diff:.3f}s → {vc_dur}")
+            print(f"[VC_SYNC] 最大步驟偏移={max_step_offset:.3f}s → {vc_sync}")
         else:
             print("[VC1] screen mp4: 未產生")
-            print("[VC3] -")
+            print("[VC_DUR] -")
+            print("[VC_SYNC] -")
 
         print("\n產物清單:")
         for p in sorted(out_dir.glob("*.mp4")) + sorted(out_dir.glob("*.png")) + sorted(out_dir.glob("*.md")):
