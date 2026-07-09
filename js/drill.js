@@ -393,7 +393,9 @@ const DRILL_TEMPLATES = [
       if (mode === "price") {
         const price = (Math.floor(rng() * 8) + 2) * 5;   // 10~45
         const qty1 = Math.floor(rng() * 5) + 2;           // 2~6
-        const qty2 = Math.floor(rng() * 7) + 3;           // 3~9
+        let qty2 = Math.floor(rng() * 7) + 3;             // 3~9
+        // 守衛：qty1===qty2 時答案等於已知值（1:1 無意義），重抽
+        while (qty2 === qty1) qty2 = (qty2 % 9) + 3;
         const cost1 = price * qty1;
         const cost2 = price * qty2;
         const q = `一個文具售價 ${price} 元，買 ${qty1} 個要 ${cost1} 元；同樣單價，買 ${qty2} 個要多少元？`;
@@ -411,7 +413,9 @@ const DRILL_TEMPLATES = [
         // 比例尺：地圖 k cm = 實際 k*scale km
         const scale = (Math.floor(rng() * 4) + 2) * 50;  // 100~350 km/cm
         const d1 = Math.floor(rng() * 5) + 1;             // 1~5 cm
-        const d2 = Math.floor(rng() * 4) + 2;             // 2~5 cm
+        let d2 = Math.floor(rng() * 4) + 2;               // 2~5 cm
+        // 守衛：d1===d2 時答案等於已知值（1:1 無意義），重抽
+        while (d2 === d1) d2 = (d2 % 5) + 2;
         const real1 = d1 * scale;
         const real2 = d2 * scale;
         const q = `地圖上 ${d1} 公分代表實際 ${real1} 公里，同比例尺地圖上 ${d2} 公分代表實際幾公里？`;
@@ -436,7 +440,9 @@ const DRILL_TEMPLATES = [
       // a:b = c:x → x = bc/a（整數）
       const a = Math.floor(rng() * 5) + 1;  // 1..5
       const x = Math.floor(rng() * 8) + 2;  // 2..9
-      const b = Math.floor(rng() * 5) + 1;
+      let b = Math.floor(rng() * 5) + 1;
+      // 守衛：a===b 時比例式退化（1:1=c:x 無唯一解意義），重抽 b
+      while (b === a) b = (b % 5) + 1;
       const c = a * x / b; // 不一定整數，改為讓 c 整數
       // 強制讓 c 為整數：c = k*a, x = k*b
       const k = Math.floor(rng() * 4) + 2;  // 2..5
@@ -576,16 +582,20 @@ const DRILL_TEMPLATES = [
     tid: "b2_symmetry",
     book: "b2",
     gen(rng) {
-      const x = Math.floor(rng() * 10) - 5;
-      const y = Math.floor(rng() * 10) - 5;
+      let x = Math.floor(rng() * 10) - 5;
+      let y = Math.floor(rng() * 10) - 5;
       const modes = ["x軸", "y軸", "x=k"];
       const mode = modes[Math.floor(rng() * 3)];
       let ans, why, q;
       if (mode === "x軸") {
+        // 守衛：y===0 時點在 x 軸上，對稱點等於自身（自映射）
+        if (y === 0) y = 1;
         ans = `(${x},${-y})`;
         why = `對 x 軸對稱：x 座標不變，y 座標取相反數。(${x}, ${y}) → (${x}, ${-y})。`;
         q = `點 (${x}, ${y}) 關於 x 軸的對稱點座標是？（格式：(x,y)）`;
       } else if (mode === "y軸") {
+        // 守衛：x===0 時點在 y 軸上，對稱點等於自身（自映射）
+        if (x === 0) x = 1;
         ans = `(${-x},${y})`;
         why = `對 y 軸對稱：y 座標不變，x 座標取相反數。(${x}, ${y}) → (${-x}, ${y})。`;
         q = `點 (${x}, ${y}) 關於 y 軸的對稱點座標是？（格式：(x,y)）`;
