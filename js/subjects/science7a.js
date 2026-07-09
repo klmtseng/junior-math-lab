@@ -1047,6 +1047,383 @@ const S7A_02_DRILL = makeStaticSciDrill(
 );
 
 /* ================================================================
+   S7A_03 — 自然界的尺度與單位
+   互動:測量工具配對(工具卡片點選對應到物理量)
+   課綱:Ea-Ⅳ(科學方法與測量/SI 單位)
+   ================================================================ */
+const S7A_03 = {
+  id: "S7A_03", short: "尺度與單位",
+  title: "關 S7A-3|自然界的尺度與單位",
+  ep: "S", subj: "s7a",
+  intro: `<p>科學測量要有共同的語言——<b>SI 單位</b>。長度的單位是<b>公尺</b>(m)、質量是<b>公斤</b>(kg)、時間是<b>秒</b>(s)。</p><p>把右邊的<b>測量工具</b>和它對應的<b>物理量</b>配對起來,再練習常用的單位換算!</p>`,
+  formal: `<p class="math">長度:1 m = 100 cm = 1000 mm　質量:1 kg = 1000 g　時間:1 min = 60 s<br>科學記號:3000 = 3×10³　0.002 = 2×10⁻³　課綱:Ea-Ⅳ</p>`,
+  goals: [
+    { id: "S7A_03-a", text: "正確配對全部 3 種測量工具" },
+    { id: "S7A_03-b", text: "完成 3 題單位換算練習" },
+  ],
+
+  /* 工具配對資料 */
+  _TOOLS: [
+    { tool: "刻度尺／游標卡尺", qty: "長度", icon: "📏", color: "#38bdf8",
+      note: "刻度尺測公分級;游標卡尺可到 0.1 mm" },
+    { tool: "天平",             qty: "質量", icon: "⚖️", color: "#fbbf24",
+      note: "天平比較左右兩邊的質量是否平衡" },
+    { tool: "碼錶",             qty: "時間", icon: "⏱️", color: "#4ade80",
+      note: "碼錶可精確計時到 0.01 秒" },
+  ],
+
+  /* 換算練習題 */
+  _CONV: [
+    { q: "1 公尺 = __ 公分", ans: "100", hint: "1 m = 100 cm" },
+    { q: "2 公斤 = __ 公克", ans: "2000", hint: "1 kg = 1000 g, 所以 2 kg = 2000 g" },
+    { q: "3 分鐘 = __ 秒",   ans: "180", hint: "1 min = 60 s, 所以 3 min = 180 s" },
+  ],
+
+  state: {
+    matched: {},   // { qty: tool } 已配對
+    selected: null, // 目前選中的工具 tool 字串
+    convIdx: 0,
+    convInput: "",
+    convDone: [],  // 已完成的換算索引
+    phase: "match", // match | conv
+  },
+
+  enter() {
+    Object.assign(this.state, {
+      matched: {}, selected: null,
+      convIdx: 0, convInput: "", convDone: [],
+      phase: "match",
+    });
+    this._renderCtl && this._renderCtl();
+  },
+
+  demo() {
+    const s = this.state, lv = this;
+    const R = () => lv._renderCtl && lv._renderCtl();
+    return [
+      {
+        call: () => { s.matched = {}; s.selected = null; s.phase = "match"; R(); },
+        cap: "科學家測量自然界時,需要統一的單位。長度、質量、時間是最基本的三個量。",
+        dur: 3000,
+      },
+      {
+        call: () => { s.matched = {}; s.selected = "刻度尺／游標卡尺"; R(); },
+        cap: "長度的國際單位是公尺。一公尺等於一百公分,一公分等於十毫米。",
+        dur: 2800,
+      },
+      {
+        call: () => { s.matched = { "長度": "刻度尺／游標卡尺" }; s.selected = null; R(); },
+        cap: "質量的國際單位是公斤。一公斤等於一千公克。測量質量要用天平。",
+        dur: 2800,
+      },
+      {
+        call: () => { s.matched = { "長度": "刻度尺／游標卡尺", "質量": "天平" }; R(); },
+        cap: "時間的國際單位是秒。一分鐘等於六十秒,一小時等於六十分鐘。測量時間用碼錶。",
+        dur: 2800,
+      },
+      {
+        call: () => {
+          s.matched = { "長度": "刻度尺／游標卡尺", "質量": "天平", "時間": "碼錶" };
+          R();
+        },
+        cap: "測量很大或很小的數,可以用科學記號。例如三千等於三乘以十的三次方。",
+        dur: 2800,
+      },
+      {
+        call: () => { s.phase = "conv"; s.convIdx = 0; s.convInput = ""; s.convDone = []; R(); },
+        cap: "現在來挑戰:把測量工具和它對應的物理量配對起來吧!",
+        dur: 2200,
+      },
+    ];
+  },
+
+  controls(el) {
+    const s = this.state, lv = this;
+    const render = () => {
+      /* ── 配對階段 ── */
+      if (s.phase === "match") {
+        const allMatched = lv._TOOLS.every(t => s.matched[t.qty] === t.tool);
+
+        /* 工具按鈕列 */
+        const toolBtns = lv._TOOLS.map(t => {
+          const sel = s.selected === t.tool;
+          const usedFor = Object.entries(s.matched).find(([, v]) => v === t.tool);
+          const done = !!usedFor;
+          const matchedQty = usedFor ? usedFor[0] : null;
+          const matchColor = done ? t.color : (sel ? "#ffd166" : "#55648f");
+          return `<button class="s7a03-tool" data-tool="${t.tool}"
+            style="display:flex;align-items:center;gap:8px;padding:8px 12px;
+              margin:4px 0;width:100%;border:2px solid ${matchColor};
+              border-radius:8px;background:${done ? t.color + "22" : (sel ? "rgba(255,209,102,.12)" : "var(--panel2)")};
+              cursor:${done ? "default" : "pointer"};font-size:.9rem;font-family:inherit;color:var(--ink);
+              ${done ? "pointer-events:none;" : ""}">
+            <span style="font-size:1.3rem">${t.icon}</span>
+            <span style="font-weight:bold">${t.tool}</span>
+            ${done ? `<span style="margin-left:auto;font-size:.78rem;color:${t.color}">✓ ${matchedQty}</span>` : ""}
+            ${sel ? `<span style="margin-left:auto;font-size:.78rem;color:#ffd166">已選取</span>` : ""}
+          </button>`;
+        }).join("");
+
+        /* 物理量按鈕列 */
+        const qtyBtns = lv._TOOLS.map(t => {
+          const matched = s.matched[t.qty];
+          const done = !!matched;
+          return `<button class="s7a03-qty" data-qty="${t.qty}"
+            style="display:flex;align-items:center;gap:8px;padding:8px 12px;
+              margin:4px 0;width:100%;border:2px solid ${done ? t.color : (s.selected ? "#a78bfa" : "#55648f")};
+              border-radius:8px;background:${done ? t.color + "22" : "var(--panel2)"};
+              cursor:${done ? "default" : (s.selected ? "pointer" : "default")};
+              font-size:.9rem;font-family:inherit;color:var(--ink);
+              ${done ? "pointer-events:none;" : ""}">
+            <span style="font-size:1.1rem">📦</span>
+            <span style="font-weight:bold">${t.qty}</span>
+            ${done ? `<span style="margin-left:auto;font-size:.78rem;color:${t.color}">✓ ${matched}</span>` : ""}
+          </button>`;
+        }).join("");
+
+        el.innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div style="font-size:.82rem;color:#9aa5c4;margin-bottom:4px">① 點選測量工具</div>
+              ${toolBtns}
+            </div>
+            <div>
+              <div style="font-size:.82rem;color:#9aa5c4;margin-bottom:4px">② 點選對應的物理量</div>
+              ${qtyBtns}
+            </div>
+          </div>
+          ${s.selected ? `<div style="margin-top:6px;font-size:.84rem;color:#ffd166">已選:${s.selected}　→ 請點右側物理量完成配對</div>` : ""}
+          ${allMatched ? `<div style="margin-top:8px"><button class="primary" id="s7a03-to-conv">進入換算練習 →</button></div>` : ""}
+          ${allMatched ? `<div style="color:#4ade80;margin-top:4px;font-size:.85rem">配對全對!繼續換算練習</div>` : ""}
+        `;
+
+        /* 選工具 */
+        el.querySelectorAll(".s7a03-tool").forEach(btn => {
+          btn.onclick = () => {
+            s.selected = btn.dataset.tool;
+            render();
+          };
+        });
+        /* 配對物理量 */
+        el.querySelectorAll(".s7a03-qty").forEach(btn => {
+          btn.onclick = () => {
+            if (!s.selected) return;
+            const qty = btn.dataset.qty;
+            /* 若該 qty 已被配對,先解除 */
+            if (s.matched[qty]) delete s.matched[qty];
+            /* 若 selected 已配到別的 qty,先解除 */
+            const old = Object.entries(s.matched).find(([, v]) => v === s.selected);
+            if (old) delete s.matched[old[0]];
+            s.matched[qty] = s.selected;
+            s.selected = null;
+            render();
+            if (lv._TOOLS.every(t => s.matched[t.qty] === t.tool)) markGoal("S7A_03-a");
+          };
+        });
+        const toConv = el.querySelector("#s7a03-to-conv");
+        if (toConv) toConv.onclick = () => { s.phase = "conv"; s.convIdx = 0; s.convInput = ""; render(); };
+        return;
+      }
+
+      /* ── 換算練習階段 ── */
+      if (s.phase === "conv") {
+        const allConvDone = s.convDone.length >= lv._CONV.length;
+        if (allConvDone) {
+          el.innerHTML = `
+            <div style="color:#4ade80;font-size:1rem;margin-bottom:8px">換算全對!三種基本量都學會了!</div>
+            <div style="font-size:.85rem;color:#9aa5c4;margin-bottom:8px">
+              1 m = 100 cm = 1000 mm<br>
+              1 kg = 1000 g<br>
+              1 min = 60 s
+            </div>
+            <button class="primary" id="s7a03-back">回到配對</button>
+          `;
+          el.querySelector("#s7a03-back").onclick = () => { s.phase = "match"; render(); };
+          markGoal("S7A_03-b");
+          return;
+        }
+        const ci = s.convIdx < lv._CONV.length ? s.convIdx : 0;
+        const cur = lv._CONV[ci];
+        const answered = s.convDone.includes(ci);
+        const correct = s.convInput.trim() === cur.ans;
+        el.innerHTML = `
+          <div style="font-size:.82rem;color:#9aa5c4;margin-bottom:4px">換算練習 ${ci + 1}/${lv._CONV.length}</div>
+          <div style="font-size:1rem;font-weight:bold;margin-bottom:10px">${cur.q}</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+            <input id="s7a03-ans" type="number" placeholder="填入數字"
+              value="${s.convInput}"
+              style="width:120px;padding:6px 10px;border-radius:6px;border:1.5px solid ${answered ? (correct ? "#4ade80" : "#ff5c7a") : "#55648f"};
+                background:var(--panel2);color:var(--ink);font-size:1rem;font-family:inherit">
+            ${!answered ? `<button class="primary" id="s7a03-check">確認</button>` : ""}
+          </div>
+          ${answered ? `<div class="quiz-msg" style="color:${correct ? "#4ade80" : "#ff5c7a"}">${correct ? "✓ 正確!" : "✗ " + cur.hint}</div>` : ""}
+          ${answered ? `<div class="row"><button class="primary" id="s7a03-next">${ci + 1 < lv._CONV.length ? "下一題" : "完成"}</button></div>` : ""}
+        `;
+        const inp = el.querySelector("#s7a03-ans");
+        if (inp && !answered) {
+          inp.oninput = () => { s.convInput = inp.value; };
+          inp.onkeydown = e => { if (e.key === "Enter") el.querySelector("#s7a03-check") && el.querySelector("#s7a03-check").click(); };
+        }
+        const checkBtn = el.querySelector("#s7a03-check");
+        if (checkBtn) checkBtn.onclick = () => {
+          s.convInput = (inp ? inp.value : s.convInput);
+          if (!s.convDone.includes(ci)) s.convDone.push(ci);
+          render();
+        };
+        const nextBtn = el.querySelector("#s7a03-next");
+        if (nextBtn) nextBtn.onclick = () => {
+          s.convIdx = ci + 1;
+          s.convInput = "";
+          render();
+        };
+      }
+    };
+    this._renderCtl = render;
+    render();
+  },
+
+  draw() {
+    const s = this.state;
+    const W = canvas.width, H = canvas.height;
+    g.fillStyle = TH.bg; g.fillRect(0, 0, W, H);
+
+    const tools = this._TOOLS;
+    const yBase = H * 0.38;
+    const xStep = W / (tools.length + 1);
+
+    tools.forEach((t, i) => {
+      const x = xStep * (i + 1);
+      const matched = Object.entries(s.matched).find(([, v]) => v === t.tool);
+      const done = !!matched;
+      const col = done ? t.color : TH.dim;
+
+      /* 工具圖示圓 */
+      drawDisc(x, yBase, 36, done ? t.color + "33" : TH.gridFaint + "88", done ? t.color : TH.axis, 2);
+      pText(x, yBase + 9, t.icon, col, 28, "center");
+      pText(x, yBase + 54, t.tool, col, 12, "center", true);
+
+      /* 配對箭頭 + 物理量 */
+      if (done) {
+        g.strokeStyle = t.color; g.lineWidth = 2;
+        g.setLineDash([5, 3]);
+        g.beginPath();
+        g.moveTo(x, yBase + 70);
+        g.lineTo(x, yBase + 110);
+        g.stroke();
+        g.setLineDash([]);
+        pText(x, yBase + 130, t.qty, t.color, 15, "center", true);
+        pText(x, yBase + 152, t.note, TH.dim, 10.5, "center");
+      } else {
+        pText(x, yBase + 76, "?", TH.gridFaint, 18, "center");
+      }
+    });
+
+    /* 科學記號示意 */
+    const sciY = H * 0.82;
+    pText(CX, sciY, "科學記號: 3000 = 3×10³   0.002 = 2×10⁻³", TH.dim, 12.5, "center");
+
+    /* readout */
+    const n = Object.keys(s.matched).length;
+    if (s.phase === "conv") {
+      readout.innerHTML = `換算練習 ${Math.min(s.convIdx + 1, this._CONV.length)}/${this._CONV.length}`;
+    } else {
+      readout.innerHTML = `已配對 <b>${n}/${tools.length}</b> 個工具`;
+    }
+  },
+};
+
+/* ================================================================
+   S7A_03_QUESTIONS — 段考題庫(自然界的尺度與單位)
+   知識點:Ea-Ⅳ SI 單位、單位換算、測量工具、科學記號、尺度比較
+   ================================================================ */
+const S7A_03_QUESTIONS = [
+  {
+    tid: "s7a_03_q1",
+    q: "下列哪一個是「長度」的 SI 國際單位?",
+    opts: ["A. 公克(g)", "B. 公尺(m)", "C. 秒(s)", "D. 公升(L)"],
+    ans: "B",
+    why: "長度的 SI 基本單位是公尺(m);公克是質量單位,秒是時間單位,公升是體積單位。",
+  },
+  {
+    tid: "s7a_03_q2",
+    q: "1 公尺等於多少公分?",
+    opts: ["A. 10 公分", "B. 100 公分", "C. 1000 公分", "D. 0.1 公分"],
+    ans: "B",
+    why: "1 m = 100 cm;公制前綴 c(centi)代表 1/100,所以 1 公尺 = 100 公分。",
+  },
+  {
+    tid: "s7a_03_q3",
+    q: "測量物體「質量」時,應使用哪種儀器?",
+    opts: ["A. 刻度尺", "B. 碼錶", "C. 天平", "D. 溫度計"],
+    ans: "C",
+    why: "天平是測量質量的工具;刻度尺測長度,碼錶測時間,溫度計測溫度。",
+  },
+  {
+    tid: "s7a_03_q4",
+    q: "2.5 公斤等於多少公克?",
+    opts: ["A. 25 公克", "B. 250 公克", "C. 2500 公克", "D. 25000 公克"],
+    ans: "C",
+    why: "1 kg = 1000 g,所以 2.5 kg = 2.5 × 1000 = 2500 g。",
+  },
+  {
+    tid: "s7a_03_q5",
+    q: "下列哪種儀器最適合測量「短跑 100 公尺的時間」?",
+    opts: ["A. 刻度尺", "B. 天平", "C. 溫度計", "D. 碼錶"],
+    ans: "D",
+    why: "碼錶是測量時間的工具,可精確計時到 0.01 秒;適合測量短跑等運動時間。",
+  },
+  {
+    tid: "s7a_03_q6",
+    q: "3000 用科學記號表示為何?",
+    opts: ["A. 3 × 10²", "B. 30 × 10²", "C. 3 × 10³", "D. 3 × 10⁴"],
+    ans: "C",
+    why: "3000 = 3 × 1000 = 3 × 10³;科學記號要求係數在 1 以上、10 未滿,再乘以 10 的冪次。",
+  },
+  {
+    tid: "s7a_03_q7",
+    q: "1 分鐘等於多少秒?",
+    opts: ["A. 10 秒", "B. 60 秒", "C. 100 秒", "D. 3600 秒"],
+    ans: "B",
+    why: "1 分鐘 = 60 秒;1 小時 = 60 分鐘 = 3600 秒。",
+  },
+  {
+    tid: "s7a_03_q8",
+    q: "下列物理量與其 SI 單位的配對,哪一項是正確的?",
+    opts: [
+      "A. 質量—秒(s)",
+      "B. 長度—公克(g)",
+      "C. 時間—公尺(m)",
+      "D. 質量—公斤(kg)",
+    ],
+    ans: "D",
+    why: "質量的 SI 單位是公斤(kg);長度是公尺(m),時間是秒(s)。",
+  },
+  {
+    tid: "s7a_03_q9",
+    q: "下列哪個數值用科學記號表示為 5 × 10⁻³?",
+    opts: ["A. 500", "B. 0.5", "C. 0.005", "D. 5000"],
+    ans: "C",
+    why: "5 × 10⁻³ = 5 × 0.001 = 0.005;負指數代表小數,指數為 −3 即小數點後三位。",
+  },
+  {
+    tid: "s7a_03_q10",
+    q: "小明要測量一枚硬幣的直徑,哪種工具最合適?",
+    opts: ["A. 碼錶", "B. 天平", "C. 刻度尺或游標卡尺", "D. 溫度計"],
+    ans: "C",
+    why: "硬幣直徑屬於長度測量,應使用刻度尺或游標卡尺;游標卡尺精度更高(可到 0.1 mm),適合小物體測量。",
+  },
+];
+
+const S7A_03_DRILL = makeStaticSciDrill(
+  "S7A_03D",
+  "尺度與單位段考練習",
+  "段考練習|S7A-3D:尺度與單位段考題庫",
+  `<p>本關模擬七上自然段考——<b>10 題</b>,涵蓋 SI 單位、單位換算、測量工具選擇、科學記號等知識點。</p><p>點選正確選項,答完後可看詳解與成績;答對率 ≥75% 解鎖通關。</p>`,
+  "完成段考練習且答對率 ≥75%(尺度與單位)",
+  S7A_03_QUESTIONS
+);
+
+/* ================================================================
    SCIENCE7A_REGISTRY — 供 main.js subject-loader 使用
    key = level id, value = 完整關卡物件(含 draw/demo/controls)
    ================================================================ */
@@ -1055,11 +1432,13 @@ const SCIENCE7A_REGISTRY = {
   S7A_01D: S7A_01_DRILL,
   S7A_02,
   S7A_02D: S7A_02_DRILL,
+  S7A_03,
+  S7A_03D: S7A_03_DRILL,
 };
 
 /* 科目定義:subject-loader 會讀這個全域 */
 window.__SUBJECT_SCIENCE7A__ = {
   subjectKey: "s7a",
   subjectName: "七上自然",
-  levels: [S7A_01, S7A_01_DRILL, S7A_02, S7A_02_DRILL],
+  levels: [S7A_01, S7A_01_DRILL, S7A_02, S7A_02_DRILL, S7A_03, S7A_03_DRILL],
 };
