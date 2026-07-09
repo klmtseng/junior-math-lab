@@ -11,7 +11,7 @@
 const DBOOK_KEY = "jrlab-drillbook-v1";
 let drillBook = {};
 try { drillBook = JSON.parse(localStorage.getItem(DBOOK_KEY) || "{}"); } catch (e) {}
-function saveDrillBook() { localStorage.setItem(DBOOK_KEY, JSON.stringify(drillBook)); }
+function saveDrillBook() { try { localStorage.setItem(DBOOK_KEY, JSON.stringify(drillBook)); } catch(e) {} }
 function dbMiss(tid) { drillBook[tid] = (drillBook[tid] || 0) + 1; saveDrillBook(); }
 function dbHit(tid)  { if (drillBook[tid]) { delete drillBook[tid]; saveDrillBook(); } }
 
@@ -516,20 +516,16 @@ const DRILL_TEMPLATES = [
       const q = `解不等式：${aDisp}x${bDisp} ${opShow} ${cConst}，寫出解集（格式：x<3 或 x>=-2）：`;
       const flipNote = a < 0 ? `（除以負數 ${a} 要翻轉不等號！）` : "";
       const why = `移項得 ${a}x ${opShow} ${cConst - bConst}；除以 ${a}${flipNote}，得 ${ansStr}。`;
+      // 標準答案正規化（供 check 比對用）
+      const ansNorm = normIneq(ansStr);
       return {
         q, ans: ansStr, why,
         check: (r) => {
-          // 獨立驗算：把使用者答案的符號和數字解析出來，驗代入數
-          const u = normAns(r.ans).replace(/\s/g, "")
-            .replace(/x\s*/i, "").replace(/≤/g, "<=").replace(/≥/g, ">=");
-          // 從 u 解析出 op 和 boundary
-          const m = u.match(/^([<>]=?|<=|>=)(-?\d+)$/) || u.match(/^(-?\d+)([<>]=?|<=|>=)$/);
-          if (!m) return false;
-          let userOp, boundary;
-          if (m[2] && /^[<>]=?$|^[<>]=$/.test(m[1])) { userOp = m[1]; boundary = parseInt(m[2]); }
-          else { userOp = m[2]; boundary = parseInt(m[1]); }
-          if (boundary !== x0) return false;
-          // 驗算：取 boundary ± 1 代入原式
+          // 獨立驗算（雙層）：
+          // 層1：學生答案經 normIneq 後必須與標準答案字串相等（精確比對不等號開閉）
+          if (normIneq(r.ans) !== ansNorm) return false;
+          // 層2：邊界值歸屬一致（嚴格不等式：邊界不屬解；非嚴格：邊界屬解）
+          const strict = (ansOp === "<" || ansOp === ">");
           const inSet = (v) => {
             const lhs = a * v + bConst;
             if (opSym === "<")  return lhs < cConst;
@@ -538,16 +534,10 @@ const DRILL_TEMPLATES = [
             if (opSym === ">=") return lhs >= cConst;
             return false;
           };
-          const userInSet = (v, bnd) => {
-            if (userOp === "<")  return v < bnd;
-            if (userOp === ">")  return v > bnd;
-            if (userOp === "<=" || userOp === "<=") return v <= bnd;
-            if (userOp === ">=" || userOp === ">=") return v >= bnd;
-            return false;
-          };
-          // 取邊界±1 驗一致性
-          return inSet(x0 - 1) === userInSet(x0 - 1, x0) &&
-                 inSet(x0 + 1) === userInSet(x0 + 1, x0);
+          // 邊界值 x0：嚴格時不屬解，非嚴格時屬解
+          const boundaryMembership = !strict;
+          return inSet(x0) === boundaryMembership &&
+                 inSet(x0 - 1) !== inSet(x0 + 1);  // 邊界兩側必須一側在解集一側不在
         },
       };
     },
