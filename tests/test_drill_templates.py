@@ -122,7 +122,9 @@ const results = {};
 for (const tpl of DRILL_TEMPLATES) {
   const tid = tpl.tid;
   const c = { checkOk: 0, checkFail: 0, normIdem: 0, normFail: 0, qOk: 0, qFail: 0,
-              t5Ok: 0, t5Fail: 0, errors: [] };
+              t5Ok: 0, t5Fail: 0,
+              t5bOk: 0, t5bFail: 0, t5bSkip: 0,  // T5b: open/close swap (b2_inequality only)
+              errors: [] };
 
   for (let seed = 1; seed <= SEEDS; seed++) {
     try {
@@ -166,6 +168,26 @@ for (const tpl of DRILL_TEMPLATES) {
         if (c.errors.length < 5) c.errors.push(`seed=${seed} T5 TAMPER ACCEPTED: ans=${gen.ans} tampered=${tampered}`);
       }
 
+      // (e) T5b 開閉互換竄改（只對 b2_inequality；方向不變，< ↔ ≤、> ↔ ≥）
+      if (tid === "b2_inequality") {
+        const tamperedOC = tamperIneqOpenClose(gen.ans);
+        if (tamperedOC === gen.ans) {
+          c.t5bSkip++;  // 答案不含不等式符號（不應發生）
+        } else {
+          let t5bBad = false;
+          try { t5bBad = gen.check({ ans: tamperedOC }); } catch(e) { t5bBad = false; }
+          if (!t5bBad) {
+            try { t5bBad = checkAnswer(tpl, gen, tamperedOC); } catch(e) { t5bBad = false; }
+          }
+          if (!t5bBad) {
+            c.t5bOk++;
+          } else {
+            c.t5bFail++;
+            if (c.errors.length < 5) c.errors.push(`seed=${seed} T5b OPEN/CLOSE ACCEPTED: ans=${gen.ans} tampered=${tamperedOC}`);
+          }
+        }
+      }
+
     } catch(e) {
       c.checkFail++;
       if (c.errors.length < 5) c.errors.push(`seed=${seed} EXCEPTION: ${e.message}`);
@@ -175,7 +197,62 @@ for (const tpl of DRILL_TEMPLATES) {
   results[tid] = c;
 }
 
-process.stdout.write(JSON.stringify(results));
+/* ── T6 退化率抽測（2000 seeds）── */
+const T6_SEEDS = 2000;
+const t6Results = {};
+
+// ratio a==b（b2_ratio_unknown）
+{
+  const tpl = DRILL_TEMPLATES.find(t => t.tid === "b2_ratio_unknown");
+  let degenCount = 0;
+  for (let seed = 1; seed <= T6_SEEDS; seed++) {
+    const rng = mulberry32(seed * 7919 + 3);
+    try {
+      const gen = tpl.gen(rng);
+      // 退化判定：題目字串含「a : a」形式（a===b 時 a:b=a:a）
+      // 更直接：解析 q 中的比例式，判斷兩端比值是否為 1:1
+      // 由於 a 和 b 已分離，檢查 q 包含「N : N = 」（兩個相同數字）
+      const m = gen.q.match(/(\d+)\s*:\s*(\d+)\s*=/);
+      if (m && m[1] === m[2]) degenCount++;
+    } catch(e) {}
+  }
+  t6Results["b2_ratio_unknown_ab_eq"] = degenCount;
+}
+
+// symmetry 自映射（b2_symmetry）：x軸模式 y==0、y軸模式 x==0
+{
+  const tpl = DRILL_TEMPLATES.find(t => t.tid === "b2_symmetry");
+  let degenCount = 0;
+  for (let seed = 1; seed <= T6_SEEDS; seed++) {
+    const rng = mulberry32(seed * 7919 + 3);
+    try {
+      const gen = tpl.gen(rng);
+      // 自映射：對稱點等於原點，即答案座標等於問題座標
+      // 從題目中提取原點座標，從 ans 提取對稱座標，比較
+      const origM = gen.q.match(/點\s*\((-?\d+),\s*(-?\d+)\)/);
+      const ansM = gen.ans.match(/\((-?\d+),(-?\d+)\)/);
+      if (origM && ansM && origM[1] === ansM[1] && origM[2] === ansM[2]) degenCount++;
+    } catch(e) {}
+  }
+  t6Results["b2_symmetry_self_map"] = degenCount;
+}
+
+// midpoint a==b（b1_midpoint）：原本沒有守衛，檢查是否出現 a==b
+{
+  const tpl = DRILL_TEMPLATES.find(t => t.tid === "b1_midpoint");
+  let degenCount = 0;
+  for (let seed = 1; seed <= T6_SEEDS; seed++) {
+    const rng = mulberry32(seed * 7919 + 3);
+    try {
+      const gen = tpl.gen(rng);
+      const m = gen.q.match(/A\((-?\d+)\)\s*和\s*B\((-?\d+)\)/);
+      if (m && m[1] === m[2]) degenCount++;
+    } catch(e) {}
+  }
+  t6Results["b1_midpoint_ab_eq"] = degenCount;
+}
+
+process.stdout.write(JSON.stringify({ results, t6Results }));
 """
 
 # 讀取 drill.js，提取 DRILL_TEMPLATES 陣列
@@ -217,7 +294,9 @@ try:
         print(f"Node.js error: {result.stderr[:500]}")
         sys.exit(1)
 
-    data = json.loads(result.stdout)
+    payload = json.loads(result.stdout)
+    data = payload["results"]
+    t6data = payload["t6Results"]
     all_pass = True
 
     print(f"\n=== 模板驗算閘門 (各 {200} seeds) ===")
@@ -226,9 +305,11 @@ try:
         norm_pass  = c["normFail"] == 0
         q_pass     = c["qFail"] == 0
         t5_pass    = c["t5Fail"] == 0
-        ok = check_pass and norm_pass and q_pass and t5_pass
+        t5b_pass   = c["t5bFail"] == 0  # 非 b2_inequality 時 t5bFail 必為 0
+        ok = check_pass and norm_pass and q_pass and t5_pass and t5b_pass
         status = "PASS" if ok else "FAIL"
-        print(f"  [{status}] {tid:28s}  check={c['checkOk']}/200  norm={c['normIdem']}/200  q={c['qOk']}/200  t5reject={c['t5Ok']}/200")
+        t5b_str = f"  t5b={c['t5bOk']}/200" if tid == "b2_inequality" else ""
+        print(f"  [{status}] {tid:28s}  check={c['checkOk']}/200  norm={c['normIdem']}/200  q={c['qOk']}/200  t5reject={c['t5Ok']}/200{t5b_str}")
         if not ok:
             all_pass = False
             for e in c["errors"][:3]:
@@ -239,14 +320,26 @@ try:
     t_norm  = all(c["normFail"] == 0 for c in data.values())
     t_q     = all(c["qFail"] == 0 for c in data.values())
     t5      = all(c["t5Fail"] == 0 for c in data.values())
+    t5b_ineq = data["b2_inequality"]["t5bFail"] == 0
+
+    # T6 退化率
+    t6_ratio_pass = t6data["b2_ratio_unknown_ab_eq"] == 0
+    t6_sym_pass   = t6data["b2_symmetry_self_map"] == 0
+    t6_mid_pass   = t6data["b1_midpoint_ab_eq"] == 0
+    t6_pass = t6_ratio_pass and t6_sym_pass and t6_mid_pass
 
     print(f"\nT1 模板數 ≥ 16: {'PASS' if t_count else 'FAIL'} ({len(data)})")
     print(f"T2 所有模板 check() 通過 200 seeds: {'PASS' if t_check else 'FAIL'}")
     print(f"T3 normAns 冪等 200 seeds: {'PASS' if t_norm else 'FAIL'}")
     print(f"T4 q/why 含數字 200 seeds: {'PASS' if t_q else 'FAIL'}")
     print(f"T5 竄改後 check 拒絕 200 seeds (反向斷言): {'PASS' if t5 else 'FAIL'}")
+    print(f"T5b b2_inequality 開閉互換竄改被拒 200 seeds: {'PASS' if t5b_ineq else 'FAIL'}")
+    print(f"T6 退化率抽測 2000 seeds:")
+    print(f"  b2_ratio_unknown a==b: {'PASS' if t6_ratio_pass else 'FAIL'} ({t6data['b2_ratio_unknown_ab_eq']} 例)")
+    print(f"  b2_symmetry 自映射:    {'PASS' if t6_sym_pass else 'FAIL'} ({t6data['b2_symmetry_self_map']} 例)")
+    print(f"  b1_midpoint a==b:      {'PASS' if t6_mid_pass else 'FAIL'} ({t6data['b1_midpoint_ab_eq']} 例)")
 
-    all_pass = all_pass and t_count and t_check and t_norm and t_q and t5
+    all_pass = all_pass and t_count and t_check and t_norm and t_q and t5 and t5b_ineq and t6_pass
 finally:
     os.unlink(tmp_path)
 

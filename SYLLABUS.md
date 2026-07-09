@@ -55,3 +55,6 @@ https://www.go100.com.tw/108_comparison_table.php
 - **複習模式不記分**:複習答對只清除錯題本,不觸發 pass 標記與證書。
 - **J10 三視圖僅單一積木造型**:只有一種積木(L型兩格)的三視圖選擇題,未涵蓋任意造型。
 - **未涵蓋小節(對應表格括號)**:科學記號、最大公因數/最小公倍數、公倍數、二元一次方程式圖形。
+- **綜合演練模板數字範圍與變體數刻意收窄**:如 `b2_axis_dist` 答案分布 top 值約 1/3 是刻意設計(整數範圍 -4..4 使 0、1 較集中),目的是讓中學生能心算驗算;`b1_prime_factorize` 限 3~4 個質因數且最大值壓在 300 以內,防止算出大數干擾操作體驗。
+- **inputmode="text" 非 numeric**:不等式(如 `x≤3`)、分數(如 `3/4`)、聯立答案(如 `x=1,y=2`)均含非數字符號,故答案欄一律用 `inputmode="text"` 而非 `numeric`。
+- **saveDrillBook 靜默降級**:滿額或無痕瀏覽模式下 localStorage.setItem 會拋 QuotaExceededError,已包 try/catch 確保不中斷答題流程,錯題本資料本 session 仍維護於記憶體。
