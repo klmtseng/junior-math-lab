@@ -1293,12 +1293,15 @@ function renderOverall() {
   overallEl.textContent = `　🎓 總進度 ${done}/${all.length}`;
 }
 function updateCert() {
-  const allDone = Object.keys(SUBJECTS).every(subjectDone);
+  // 全科證書只看 b1+b2（七上+七下），mx 演練各自有通關標記但不影響全科判定
+  const certSubjects = Object.keys(SUBJECTS).filter(k => k !== "mx");
+  const allDone = certSubjects.every(subjectDone);
+  const certLevels = certSubjects.flatMap(k => SUBJECTS[k].levels);
   const key = curSubject, sub = SUBJECTS[key];
   const date = new Date().toISOString().slice(0, 10);
   if (allDone) {
     certEl.className = "show";
-    certEl.innerHTML = `<div class="big">🏆 全通關!國中銜接 ${allLevels().length} 關全部完成</div><div class="sub">國中數感實驗室 · ${date} · 截圖留念吧</div>`;
+    certEl.innerHTML = `<div class="big">🏆 全通關!國中銜接 ${certLevels.length} 關全部完成</div><div class="sub">國中數感實驗室 · ${date} · 截圖留念吧</div>`;
   } else if (subjectDone(key)) {
     certEl.className = "show";
     certEl.innerHTML = `<div class="big">🎓 恭喜完成【${sub.name}】${sub.levels.length} 關!</div><div class="sub">國中數感實驗室 · ${date} · 截圖留念吧</div>`;

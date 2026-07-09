@@ -38,10 +38,12 @@ function normAns(s) {
   // 去空白、全形→半形、繁體大小寫數字統一不處理(以生活情境整數為主)
   return String(s).replace(/\s/g, "")
     .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
-    .replace(/[＋＋]/g, "+").replace(/[－−]/g, "-")
+    .replace(/[＋＋]/g, "+").replace(/[－−−]/g, "-")
     .replace(/[＜]/g, "<").replace(/[＞]/g, ">")
     .replace(/[≦]/g, "<=").replace(/[≧]/g, ">=")
     .replace(/[×]/g, "*").replace(/[÷]/g, "/")
+    .replace(/，/g, ",")           // 全形逗號 → 半形
+    .replace(/（/g, "(").replace(/）/g, ")")  // 全形括號 → 半形
     .toLowerCase();
 }
 function normIneq(s) {
@@ -106,8 +108,9 @@ const DRILL_TEMPLATES = [
     book: "b1",
     gen(rng) {
       const a = Math.floor(rng() * 12) - 6;  // -6..5
-      const b = Math.floor(rng() * 12) - 6;
-      if (a === b) { b + 1; } // 避免相等(此 gen 只是位移一下，下方 check 仍正確)
+      let b = Math.floor(rng() * 12) - 6;
+      // 保證 |a| ≠ |b|（避免退化的「一樣大」佔比過高）
+      while (Math.abs(b) === Math.abs(a)) b = Math.floor(rng() * 12) - 6;
       const ansA = Math.abs(a), ansB = Math.abs(b);
       let ans, why;
       if (ansA > ansB) {
@@ -140,10 +143,10 @@ const DRILL_TEMPLATES = [
     book: "b1",
     gen(rng) {
       const a = Math.floor(rng() * 16) - 8;
-      let b = Math.floor(rng() * 16) - 8;
-      while (b === a) b = Math.floor(rng() * 16) - 8;
-      // 確保兩點之和為偶數（答案為整數）
-      if ((a + b) % 2 !== 0) { b = b + 1; }
+      // 取非零偶數偏移 k（±2/±4/±6/±8），保證 a+b 為偶數且 b≠a
+      const kSign = rng() < 0.5 ? 1 : -1;
+      const kAbs = (Math.floor(rng() * 4) + 1) * 2;  // 2,4,6,8
+      const b = a + kSign * kAbs;
       const mid = (a + b) / 2;
       const q = `數線上兩點 A(${a}) 和 B(${b})，AB 的中點座標是多少？`;
       const why = `中點 = (A + B) ÷ 2 = (${a} + ${b}) ÷ 2 = ${a + b} ÷ 2 = ${mid}。`;
@@ -151,8 +154,8 @@ const DRILL_TEMPLATES = [
         q, ans: String(mid), why,
         check: (r) => {
           const m = parseFloat(r.ans);
-          // 驗算：中點到 a 和到 b 的距離相等
-          return Math.abs(Math.abs(m - a) - Math.abs(m - b)) < 0.001;
+          // 驗算：a≠b 且中點到 a、b 距離相等
+          return a !== b && Math.abs(Math.abs(m - a) - Math.abs(m - b)) < 0.001;
         },
       };
     },
@@ -273,15 +276,19 @@ const DRILL_TEMPLATES = [
     tid: "b1_frac_mult",
     book: "b1",
     gen(rng) {
-      const a = Math.floor(rng() * 4) + 1;  // 1..4
+      let a = Math.floor(rng() * 4) + 1;  // 1..4
       const b = Math.floor(rng() * 4) + 2;  // 2..5
-      const c = Math.floor(rng() * 4) + 1;
+      let c = Math.floor(rng() * 4) + 1;
       const d = Math.floor(rng() * 4) + 2;
-      if (a >= b || c >= d) { /* 讓分子 < 分母，確保 < 1 的真分數 */ }
-      const rn = a * c, rd = b * d;
+      // 避免兩個分數都等於 1（a==b 且 c==d）
+      if (a === b && c === d) { a = a > 1 ? a - 1 : 1; /* 至少其一為真分數 */ }
+      // 讓分子 < 分母確保 < 1 的真分數；若違反，截斷分子
+      const aFinal = Math.min(a, b - 1) || 1;
+      const cFinal = Math.min(c, d - 1) || 1;
+      const rn = aFinal * cFinal, rd = b * d;
       const ans = fracStr(rn, rd);
-      const q = `計算：${a}/${b} × ${c}/${d} = ?（化簡後填分數如 1/3）`;
-      const why = `分子乘分子：${a}×${c}=${rn}；分母乘分母：${b}×${d}=${rd}；化簡 ${rn}/${rd} = ${ans}。`;
+      const q = `計算：${aFinal}/${b} × ${cFinal}/${d} = ?（化簡後填分數如 1/3）`;
+      const why = `分子乘分子：${aFinal}×${cFinal}=${rn}；分母乘分母：${b}×${d}=${rd}；化簡 ${rn}/${rd} = ${ans}。`;
       return {
         q, ans, why,
         check: (r) => fracMatch(r.ans, rn, rd),
@@ -593,7 +600,9 @@ const DRILL_TEMPLATES = [
         why = `對 y 軸對稱：y 座標不變，x 座標取相反數。(${x}, ${y}) → (${-x}, ${y})。`;
         q = `點 (${x}, ${y}) 關於 y 軸的對稱點座標是？（格式：(x,y)）`;
       } else {
-        const k = Math.floor(rng() * 7) - 3;
+        let k = Math.floor(rng() * 7) - 3;
+        // 保證點不在對稱軸上（x≠k，避免自映射）
+        while (k === x) k = k < 3 ? k + 1 : k - 1;
         const mx = 2 * k - x;
         ans = `(${mx},${y})`;
         why = `對直線 x = ${k} 對稱：y 不變，x 映射為 2×${k} - ${x} = ${mx}。`;

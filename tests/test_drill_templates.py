@@ -71,13 +71,43 @@ function checkAnswer(tpl, gen_result, userRaw) {
   try { return tpl.gen && gen_result.check && gen_result.check({ ans: userRaw }); } catch(e) { return false; }
 }
 
+/* ── T5 答案竄改函式（針對每種題型格式） ── */
+function tamperAns(ans) {
+  const s = String(ans);
+  // 數字型（整數或小數）
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    return String(parseFloat(s) + 1);
+  }
+  // 分數型 n/d
+  const fracM = s.match(/^(-?\d+)\/(\d+)$/);
+  if (fracM) return `${parseInt(fracM[1]) + 1}/${fracM[2]}`;
+  // 不等式型 x<N / x>=N
+  if (/^x[<>]=?-?\d+$/.test(s)) {
+    return s.replace(/[<>]=?/, op => {
+      if (op === "<") return ">";
+      if (op === ">") return "<";
+      if (op === "<=") return ">=";
+      return "<=";
+    });
+  }
+  // 座標型 (x,y)
+  const coordM = s.match(/^\((-?\d+),(-?\d+)\)$/);
+  if (coordM) return `(${parseInt(coordM[1])+1},${coordM[2]})`;
+  // 聯立 x=N,y=M
+  const simM = s.match(/^x=(-?\d+),y=(-?\d+)$/);
+  if (simM) return `x=${parseInt(simM[1])+1},y=${simM[2]}`;
+  // 質因數 / 象限 / |N| / 一樣大 / 其他字串 → 固定錯答案
+  return "__WRONG__";
+}
+
 /* ── 主驗算迴圈 ── */
 const SEEDS = 200;
 const results = {};
 
 for (const tpl of DRILL_TEMPLATES) {
   const tid = tpl.tid;
-  const c = { checkOk: 0, checkFail: 0, normIdem: 0, normFail: 0, qOk: 0, qFail: 0, errors: [] };
+  const c = { checkOk: 0, checkFail: 0, normIdem: 0, normFail: 0, qOk: 0, qFail: 0,
+              t5Ok: 0, t5Fail: 0, errors: [] };
 
   for (let seed = 1; seed <= SEEDS; seed++) {
     try {
@@ -104,6 +134,21 @@ for (const tpl of DRILL_TEMPLATES) {
       else {
         c.qFail++;
         if (c.errors.length < 5) c.errors.push(`seed=${seed} q has no digit: ${gen.q.slice(0,60)}`);
+      }
+
+      // (d) T5 反向斷言：竄改後 check/checkAnswer 必須判錯
+      const tampered = tamperAns(gen.ans);
+      let t5Bad = false;
+      try { t5Bad = gen.check({ ans: tampered }); } catch(e) { t5Bad = false; }
+      // 也用 checkAnswer（字串比對路徑）
+      if (!t5Bad) {
+        try { t5Bad = checkAnswer(tpl, gen, tampered); } catch(e) { t5Bad = false; }
+      }
+      if (!t5Bad) {
+        c.t5Ok++;
+      } else {
+        c.t5Fail++;
+        if (c.errors.length < 5) c.errors.push(`seed=${seed} T5 TAMPER ACCEPTED: ans=${gen.ans} tampered=${tampered}`);
       }
 
     } catch(e) {
@@ -165,9 +210,10 @@ try:
         check_pass = c["checkFail"] == 0
         norm_pass  = c["normFail"] == 0
         q_pass     = c["qFail"] == 0
-        ok = check_pass and norm_pass and q_pass
+        t5_pass    = c["t5Fail"] == 0
+        ok = check_pass and norm_pass and q_pass and t5_pass
         status = "PASS" if ok else "FAIL"
-        print(f"  [{status}] {tid:28s}  check={c['checkOk']}/200  norm={c['normIdem']}/200  q={c['qOk']}/200")
+        print(f"  [{status}] {tid:28s}  check={c['checkOk']}/200  norm={c['normIdem']}/200  q={c['qOk']}/200  t5reject={c['t5Ok']}/200")
         if not ok:
             all_pass = False
             for e in c["errors"][:3]:
@@ -177,13 +223,15 @@ try:
     t_check = all(c["checkFail"] == 0 for c in data.values())
     t_norm  = all(c["normFail"] == 0 for c in data.values())
     t_q     = all(c["qFail"] == 0 for c in data.values())
+    t5      = all(c["t5Fail"] == 0 for c in data.values())
 
     print(f"\nT1 模板數 ≥ 16: {'PASS' if t_count else 'FAIL'} ({len(data)})")
     print(f"T2 所有模板 check() 通過 200 seeds: {'PASS' if t_check else 'FAIL'}")
     print(f"T3 normAns 冪等 200 seeds: {'PASS' if t_norm else 'FAIL'}")
     print(f"T4 q/why 含數字 200 seeds: {'PASS' if t_q else 'FAIL'}")
+    print(f"T5 竄改後 check 拒絕 200 seeds (反向斷言): {'PASS' if t5 else 'FAIL'}")
 
-    all_pass = all_pass and t_count and t_check and t_norm and t_q
+    all_pass = all_pass and t_count and t_check and t_norm and t_q and t5
 finally:
     os.unlink(tmp_path)
 
