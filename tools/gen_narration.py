@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """數感實驗室示範旁白生成器(離線,Kokoro zf_xiaoxiao + misaki[zh])。
-用法: ~/Desktop/AI_MAC/tools/kokoro-venv/bin/python gen_narration.py [--force]
-讀 tools/captions.json → 每句符號轉口語 → 生成 audio/<id>_<i>.mp3
+用法:
+  ~/Desktop/AI_MAC/tools/kokoro-venv/bin/python gen_narration.py [--force]
+  ~/Desktop/AI_MAC/tools/kokoro-venv/bin/python gen_narration.py --subject science7a [--force]
+
+  --subject <name>  指定科目:讀 tools/captions_<name>.json,輸出 audio/<id>_<i>.mp3
+                    (預設:讀 tools/captions.json,行為與原來一致)
+  --force           強制重新生成已存在的 mp3
+
+讀 captions JSON → 每句符號轉口語 → 生成 audio/<ID>_<i>.mp3
 音色:zf_xiaoxiao(大陸腔,使用者定案 2026-07-06);中文 G2P 必用 misaki(espeak 唸不了)。
 字幕寫作規則:禁用括號(舊版會吞成黏音);座標/數對用「3、負2」式寫法;符號轉換表見 WORDS。
 """
@@ -53,7 +60,21 @@ def say(t):
 
 def main():
     force = "--force" in sys.argv
-    caps = json.load(open(os.path.join(HERE, "tools", "captions.json"), encoding="utf-8"))
+    # --subject <name> 參數:讀 tools/captions_<name>.json;未指定則讀 captions.json
+    subject = None
+    if "--subject" in sys.argv:
+        idx = sys.argv.index("--subject")
+        if idx + 1 < len(sys.argv):
+            subject = sys.argv[idx + 1]
+    if subject:
+        cap_file = os.path.join(HERE, "tools", f"captions_{subject}.json")
+        if not os.path.exists(cap_file):
+            print(f"錯誤:找不到 {cap_file}", file=sys.stderr)
+            sys.exit(1)
+        print(f"[gen_narration] subject={subject}, captions={cap_file}")
+    else:
+        cap_file = os.path.join(HERE, "tools", "captions.json")
+    caps = json.load(open(cap_file, encoding="utf-8"))
     outdir = os.path.join(HERE, "audio"); os.makedirs(outdir, exist_ok=True)
     k = Kokoro(f"{KROOT}/kokoro-v1.0.onnx", f"{KROOT}/voices-v1.0.bin")
     g2p = zh.ZHG2P()
