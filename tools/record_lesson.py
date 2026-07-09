@@ -32,7 +32,7 @@ FFMPEG_DIR = Path.home() / "Desktop/AI_MAC/tools/ffmpeg/ffmpeg-7.0.2-amd64-stati
 FFMPEG     = str(FFMPEG_DIR / "ffmpeg")
 FFPROBE    = str(FFMPEG_DIR / "ffprobe")
 
-PORT   = 8802
+PORT   = 8803
 WIDTH  = 1280
 HEIGHT = 720
 FPS    = 30
@@ -40,14 +40,35 @@ FPS    = 30
 # ── 關卡 demo 步驟元資料 ──────────────────────────────────────────────────────
 # True = 有插值動畫(取 4 張截圖均分時長); False = 靜態(取 1 張)
 # J1: step0=call(靜), step1=num動畫, step2=call(靜), step3=num動畫, step4=call(靜)
+# S7A_01: 6 步全為 call(靜)——拖放分類 DOM 更新,無 num/vec 插值
 DEMO_META = {
-    "J1": [False, True, False, True, False],
+    "J1":    [False, True, False, True, False],
+    "S7A_01": [False, False, False, False, False, False],
 }
 
-# ── JS helper:找 level 物件 ──────────────────────────────────────────────────
+# ── 科目 URL 對應表:level id 前綴 → URL 參數 ─────────────────────────────────
+# 有 URL 參數的科目需用 ?subject=<val> 載入才能找到該關卡
+LEVEL_SUBJECT_PARAM = {
+    "S": "science7a",   # S7A_01, S7A_02 … 等均以 S 開頭
+}
+
+def level_url_param(level: str) -> str | None:
+    """根據 level id 決定需要的 ?subject= 參數,數學 J 系列回傳 None。"""
+    for prefix, param in LEVEL_SUBJECT_PARAM.items():
+        if level.startswith(prefix):
+            return param
+    return None
+
+# ── JS helper:找 level 物件(支援數學 JH_LEVELS 與動態載入科目) ───────────────
 FIND_LEVEL_JS = """
 (function(levelId) {
-    const all = Array.from(JH_LEVELS);
+    // 先從動態科目的 levels 陣列找(science 等)
+    if (typeof levels !== 'undefined') {
+        const lv = levels.find(l => l.id === levelId);
+        if (lv) return lv;
+    }
+    // fallback:數學 JH_LEVELS
+    const all = Array.from(typeof JH_LEVELS !== 'undefined' ? JH_LEVELS : []);
     if (typeof J7  !== 'undefined') all.push(J7);
     if (typeof J8  !== 'undefined') all.push(J8);
     if (typeof J9  !== 'undefined') all.push(J9);
@@ -120,30 +141,47 @@ def start_server(root: Path, port: int):
     return proc
 
 
-def navigate_to_level(page, level: str):
-    ok = page.evaluate(FIND_LEVEL_JS + f"('{level}')" + """
-        !== null
-        ? (function(levelId) {
-            const all = Array.from(JH_LEVELS);
-            if (typeof J7  !== 'undefined') all.push(J7);
-            if (typeof J8  !== 'undefined') all.push(J8);
-            if (typeof J9  !== 'undefined') all.push(J9);
-            if (typeof J10 !== 'undefined') all.push(J10);
-            const lv = all.find(l => l.id === levelId);
-            if (lv && typeof loadLevel === 'function') { loadLevel(lv); return true; }
-            return false;
-          })
-        : false
-    """)
-    # 更簡單的版本:直接執行
-    ok = page.evaluate(f"""
+def _find_level_js(level: str) -> str:
+    """產生找 level 物件的 JS 片段(支援數學 JH_LEVELS 與動態載入科目)。"""
+    return f"""
     (function() {{
-        const all = Array.from(JH_LEVELS);
+        const levelId = '{level}';
+        // 先從頁面的動態 levels 陣列找(science 等動態科目)
+        if (typeof levels !== 'undefined') {{
+            const lv = levels.find(l => l.id === levelId);
+            if (lv) return lv;
+        }}
+        // fallback:數學 JH_LEVELS
+        const all = typeof JH_LEVELS !== 'undefined' ? Array.from(JH_LEVELS) : [];
         if (typeof J7  !== 'undefined') all.push(J7);
         if (typeof J8  !== 'undefined') all.push(J8);
         if (typeof J9  !== 'undefined') all.push(J9);
         if (typeof J10 !== 'undefined') all.push(J10);
-        const lv = all.find(l => l.id === '{level}');
+        return all.find(l => l.id === levelId) || null;
+    }})()
+    """
+
+
+def navigate_to_level(page, level: str):
+    """導航到指定關卡(支援數學 J 系列與自然科 S 系列)。"""
+    ok = page.evaluate(f"""
+    (function() {{
+        const levelId = '{level}';
+        // 先從頁面的動態 levels 陣列找(science 等動態科目)
+        if (typeof levels !== 'undefined') {{
+            const idx = levels.findIndex(l => l.id === levelId);
+            if (idx >= 0) {{
+                if (typeof switchLevel === 'function') switchLevel(idx);
+                return true;
+            }}
+        }}
+        // fallback:數學 JH_LEVELS
+        const all = typeof JH_LEVELS !== 'undefined' ? Array.from(JH_LEVELS) : [];
+        if (typeof J7  !== 'undefined') all.push(J7);
+        if (typeof J8  !== 'undefined') all.push(J8);
+        if (typeof J9  !== 'undefined') all.push(J9);
+        if (typeof J10 !== 'undefined') all.push(J10);
+        const lv = all.find(l => l.id === levelId);
         if (!lv) return false;
         if (typeof loadLevel === 'function') loadLevel(lv);
         return true;
@@ -157,12 +195,17 @@ def navigate_to_level(page, level: str):
 def get_demo_steps_info(page, level: str) -> list[dict]:
     return page.evaluate(f"""
     (function() {{
-        const all = Array.from(JH_LEVELS);
-        if (typeof J7  !== 'undefined') all.push(J7);
-        if (typeof J8  !== 'undefined') all.push(J8);
-        if (typeof J9  !== 'undefined') all.push(J9);
-        if (typeof J10 !== 'undefined') all.push(J10);
-        const lv = all.find(l => l.id === '{level}');
+        const levelId = '{level}';
+        let lv = null;
+        if (typeof levels !== 'undefined') lv = levels.find(l => l.id === levelId);
+        if (!lv && typeof JH_LEVELS !== 'undefined') {{
+            const all = Array.from(JH_LEVELS);
+            if (typeof J7  !== 'undefined') all.push(J7);
+            if (typeof J8  !== 'undefined') all.push(J8);
+            if (typeof J9  !== 'undefined') all.push(J9);
+            if (typeof J10 !== 'undefined') all.push(J10);
+            lv = all.find(l => l.id === levelId);
+        }}
         if (!lv || !lv.demo) return [];
         return lv.demo().map(function(s) {{
             return {{
@@ -180,16 +223,21 @@ def get_demo_steps_info(page, level: str) -> list[dict]:
 def set_step_state(page, level: str, step_i: int, t_frac: float = 1.0):
     """
     在瀏覽器裡把 demo 的第 step_i 步設到時間分位 t_frac (0=起點,1=終點)。
-    靜態步 t_frac 無意義,固定終態。
+    靜態步 t_frac 無意義,固定終態。支援數學 J 系列與自然科 S 系列。
     """
     page.evaluate(f"""
     (function() {{
-        const all = Array.from(JH_LEVELS);
-        if (typeof J7  !== 'undefined') all.push(J7);
-        if (typeof J8  !== 'undefined') all.push(J8);
-        if (typeof J9  !== 'undefined') all.push(J9);
-        if (typeof J10 !== 'undefined') all.push(J10);
-        const lv = all.find(l => l.id === '{level}');
+        const levelId = '{level}';
+        let lv = null;
+        if (typeof levels !== 'undefined') lv = levels.find(l => l.id === levelId);
+        if (!lv && typeof JH_LEVELS !== 'undefined') {{
+            const all = Array.from(JH_LEVELS);
+            if (typeof J7  !== 'undefined') all.push(J7);
+            if (typeof J8  !== 'undefined') all.push(J8);
+            if (typeof J9  !== 'undefined') all.push(J9);
+            if (typeof J10 !== 'undefined') all.push(J10);
+            lv = all.find(l => l.id === levelId);
+        }}
         if (!lv || !lv.demo) return;
         const steps = lv.demo();
         const st = steps[{step_i}];
@@ -372,14 +420,20 @@ def mode_screen(level: str, out_dir: Path, base_url: str):
         print(f"[screen] demo JS 總時長={total_js_ms}ms, {len(steps_info)} 步")
 
         # 注入 monkey-patch:記錄每步 next() 呼叫時刻,然後啟動 player
+        # 支援數學 J 系列(JH_LEVELS)與自然科 S 系列(頁面 levels 陣列)
         page.evaluate(f"""
         (function() {{
-            const all = Array.from(JH_LEVELS);
-            if (typeof J7  !== 'undefined') all.push(J7);
-            if (typeof J8  !== 'undefined') all.push(J8);
-            if (typeof J9  !== 'undefined') all.push(J9);
-            if (typeof J10 !== 'undefined') all.push(J10);
-            const lv = all.find(l => l.id === '{level}');
+            const levelId = '{level}';
+            let lv = null;
+            if (typeof levels !== 'undefined') lv = levels.find(l => l.id === levelId);
+            if (!lv && typeof JH_LEVELS !== 'undefined') {{
+                const all = Array.from(JH_LEVELS);
+                if (typeof J7  !== 'undefined') all.push(J7);
+                if (typeof J8  !== 'undefined') all.push(J8);
+                if (typeof J9  !== 'undefined') all.push(J9);
+                if (typeof J10 !== 'undefined') all.push(J10);
+                lv = all.find(l => l.id === levelId);
+            }}
             if (!lv || !lv.demo) return;
 
             const orig_next = player.next.bind(player);
@@ -465,15 +519,20 @@ def make_thumbnail(level: str, out_dir: Path, base_url: str) -> Path:
         page.wait_for_timeout(800)
         navigate_to_level(page, level)
 
-        # 設到代表性一幀(J1: 步驟3終態,點在 2)
+        # 設到代表性一幀(J1: 步驟3終態; S7A_01: 步驟3終態=三個植物構造已放置)
         n_demo_steps = page.evaluate(f"""
         (function() {{
-            const all = Array.from(JH_LEVELS);
-            if (typeof J7  !== 'undefined') all.push(J7);
-            if (typeof J8  !== 'undefined') all.push(J8);
-            if (typeof J9  !== 'undefined') all.push(J9);
-            if (typeof J10 !== 'undefined') all.push(J10);
-            const lv = all.find(l => l.id === '{level}');
+            const levelId = '{level}';
+            let lv = null;
+            if (typeof levels !== 'undefined') lv = levels.find(l => l.id === levelId);
+            if (!lv && typeof JH_LEVELS !== 'undefined') {{
+                const all = Array.from(JH_LEVELS);
+                if (typeof J7  !== 'undefined') all.push(J7);
+                if (typeof J8  !== 'undefined') all.push(J8);
+                if (typeof J9  !== 'undefined') all.push(J9);
+                if (typeof J10 !== 'undefined') all.push(J10);
+                lv = all.find(l => l.id === levelId);
+            }}
             return lv && lv.demo ? lv.demo().length : 0;
         }})()
         """)
@@ -497,21 +556,38 @@ def make_thumbnail(level: str, out_dir: Path, base_url: str) -> Path:
     cjk_font = next((f for f in cjk_fonts if Path(f).exists()), None)
     en_font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
+    # 縮圖文字查找表
+    THUMB_CJK: dict[str, str] = {
+        "J1":    "關1負數在數線上走路",
+        "S7A_01": "細胞基本構造",
+    }
+    THUMB_EN: dict[str, str] = {
+        "J1":    "Junior Math Lab",
+        "S7A_01": "Junior Science Lab",
+    }
+    cjk_text = THUMB_CJK.get(level, level)
+    en_text  = THUMB_EN.get(level, "Junior Math Lab")
+
     if cjk_font:
+        # ffmpeg drawtext 不支援直接 Unicode 字串,須先用 unicode_escape
+        cjk_escaped = "".join(
+            f"\\u{ord(c):04x}" if ord(c) > 127 else c
+            for c in cjk_text
+        )
         vf = (
             f"drawtext=fontfile={en_font}:"
-            f"text='Junior Math Lab':"
+            f"text='{en_text}':"
             f"fontcolor=white:fontsize=36:borderw=2:bordercolor=black:"
             f"x=(w-text_w)/2:y=h-70,"
             f"drawtext=fontfile={cjk_font}:"
-            f"text='\\u95dc1\\u8ca0\\u6578\\u5728\\u6578\\u7dda\\u4e0a\\u8d70\\u8def':"
+            f"text='{cjk_escaped}':"
             f"fontcolor=#ffd166:fontsize=56:borderw=3:bordercolor=black:"
             f"x=(w-text_w)/2:y=20"
         )
     else:
         vf = (
             f"drawtext=fontfile={en_font}:"
-            f"text='Junior Math Lab - Lesson 1 Negative Numbers':"
+            f"text='{en_text} - {cjk_text}':"
             f"fontcolor=white:fontsize=36:borderw=2:bordercolor=black:"
             f"x=(w-text_w)/2:y=h-70"
         )
@@ -528,52 +604,98 @@ def make_thumbnail(level: str, out_dir: Path, base_url: str) -> Path:
     return thumb_out
 
 
-# ── metadata ──────────────────────────────────────────────────────────────────
+# ── 關卡 metadata 查找表(YouTube 標題/描述/受眾) ─────────────────────────────
+LEVEL_META: dict[str, dict] = {
+    "J1": {
+        "title_screen":   "關1負數在數線上走路｜互動示範錄屏｜國中數感實驗室",
+        "title_explain":  "關1負數在數線上走路｜國中數學動畫講解｜國中數感實驗室",
+        "desc_screen": (
+            "🎓 七年級數學：負數在數線上的直覺示範\n"
+            "看老師在網頁上「走」數線展示 3＋(−5)＝−2 與 (−4)−(−6)＝2。\n\n"
+            "本影片錄製自「國中數感實驗室」互動關卡。\n"
+            "👉 自己動手玩：https://junior-math-lab.vercel.app\n\n"
+            "#國中數學 #負數 #數線 #七年級數學 #互動數學"
+        ),
+        "desc_explain": (
+            "🎓 七年級數學開學第一課：負數怎麼算？\n"
+            "用數線走路的方式，直覺感受「加負數＝往左走、減負數＝往右走」。\n"
+            "不死背規則，用腳步記住負數！\n\n"
+            "本影片由「國中數感實驗室」互動關卡自動生成。\n"
+            "👉 互動練習版（可自己拖動）：https://junior-math-lab.vercel.app\n\n"
+            "📌 章節：\n"
+            "0:00 從 3 出發，算 3＋(−5)\n"
+            "0:02 加負數＝轉身往左走 5 步，停在 −2\n"
+            "0:05 換題：(−4)−(−6)\n"
+            "0:07 減負數＝轉兩次身＝往右走 6 步，停在 2\n\n"
+            "#國中數學 #負數 #數線 #七年級數學 #國中數感實驗室"
+        ),
+        "audience": "台灣國中生家長、七年級學生、暑期預習",
+    },
+    "S7A_01": {
+        "title_screen":  "細胞基本構造｜植物vs動物細胞互動示範｜國中自然科",
+        "title_explain": "細胞基本構造｜植物細胞才有什麼？動畫講解｜國中自然科",
+        "desc_screen": (
+            "🔬 七年級自然科：細胞基本構造互動示範\n"
+            "看老師在網頁上逐步把細胞壁、葉綠體、液胞放入植物欄，\n"
+            "細胞膜、細胞核、粒線體放入動植物都有欄，輕鬆記住差異！\n\n"
+            "本影片錄製自「國中數感實驗室」自然科互動關卡。\n"
+            "👉 自己動手玩：https://junior-math-lab.vercel.app?subject=science7a\n\n"
+            "#國中自然 #細胞 #植物細胞 #動物細胞 #七年級自然 #細胞構造"
+        ),
+        "desc_explain": (
+            "🔬 七年級自然科：細胞是生命的基本單位\n"
+            "哪些構造是植物才有？哪些動植物都有？\n"
+            "✅ 植物才有：細胞壁、葉綠體、液胞\n"
+            "✅ 動植物都有：細胞膜、細胞核、粒線體\n\n"
+            "本影片由「國中數感實驗室」自然科互動關卡自動生成。\n"
+            "👉 互動版（可自己拖動分類）：https://junior-math-lab.vercel.app?subject=science7a\n\n"
+            "📌 章節：\n"
+            "0:00 細胞是生命的基本單位\n"
+            "0:06 細胞壁：植物才有\n"
+            "0:15 葉綠體：植物才有（光合作用）\n"
+            "0:24 液胞：植物才有（大型儲水）\n"
+            "0:32 細胞膜、細胞核、粒線體：動植物都有\n"
+            "0:44 換你試試！\n\n"
+            "#國中自然 #細胞 #植物細胞 #動物細胞 #七年級自然 #國中數感實驗室"
+        ),
+        "audience": "台灣國中生家長、七年級學生、自然科預習複習",
+    },
+}
+
 
 def write_metadata(level: str, out_dir: Path) -> Path:
     path = out_dir / "metadata.md"
+    meta = LEVEL_META.get(level, {})
+
+    title_screen  = meta.get("title_screen",  f"{level} 互動錄屏示範｜國中數感實驗室")
+    title_explain = meta.get("title_explain", f"{level} 動畫講解｜國中數感實驗室")
+    desc_screen   = meta.get("desc_screen",   f"本影片錄製自「國中數感實驗室」關卡 {level}。")
+    desc_explain  = meta.get("desc_explain",  f"本影片由「國中數感實驗室」關卡 {level} 自動生成。")
+    audience      = meta.get("audience",      "台灣國中生家長、七年級學生")
+
     path.write_text(f"""# {level} 影片 YouTube Metadata
 
 ## {level}_explain.mp4 — 講解式動畫
 
 **標題**
-關1負數在數線上走路｜國中數學動畫講解｜國中數感實驗室
+{title_explain}
 
 **描述**
-🎓 七年級數學開學第一課：負數怎麼算？
-用數線走路的方式，直覺感受「加負數＝往左走、減負數＝往右走」。
-不死背規則，用腳步記住負數！
+{desc_explain}
 
-本影片由「國中數感實驗室」互動關卡自動生成。
-👉 互動練習版（可自己拖動）：https://junior-math-lab.vercel.app
-
-📌 章節：
-0:00 從 3 出發，算 3＋(−5)
-0:02 加負數＝轉身往左走 5 步，停在 −2
-0:05 換題：(−4)−(−6)
-0:07 減負數＝轉兩次身＝往右走 6 步，停在 2
-
-#國中數學 #負數 #數線 #七年級數學 #國中數感實驗室
-
-**受眾**：台灣國中生家長、七年級學生、暑期預習
+**受眾**：{audience}
 
 ---
 
 ## {level}_screen.mp4 — 互動錄屏示範
 
 **標題**
-關1負數在數線上走路｜互動示範錄屏｜國中數感實驗室
+{title_screen}
 
 **描述**
-🎓 七年級數學：負數在數線上的直覺示範
-看老師在網頁上「走」數線展示 3＋(−5)＝−2 與 (−4)−(−6)＝2。
+{desc_screen}
 
-本影片錄製自「國中數感實驗室」互動關卡。
-👉 自己動手玩：https://junior-math-lab.vercel.app
-
-#國中數學 #負數 #數線 #七年級數學 #互動數學
-
-**受眾**：台灣國中生家長、七年級學生
+**受眾**：{audience}
 """, encoding="utf-8")
     print(f"[meta] {path}")
     return path
@@ -595,7 +717,11 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     srv = start_server(REPO_ROOT, PORT)
+    # 自然科 S 系列需要 ?subject=science7a 才能載入關卡
+    subject_param = level_url_param(args.level)
     base_url = f"http://localhost:{PORT}/"
+    if subject_param:
+        base_url = f"http://localhost:{PORT}/?subject={subject_param}"
     print(f"[server] {base_url} → {REPO_ROOT}")
 
     try:
