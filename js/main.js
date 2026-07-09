@@ -1269,11 +1269,38 @@ const JQ_LEVEL = makeQuiz("JQ", "銜接總測驗", 5, [
 // JH_LEVELS[0-5] = J1 J2 J3 J4 J5 J6 (原始陣列,id 不動)
 const [_J1, _J2, _J3, _J4, _J5, _J6] = JH_LEVELS; // 解構方便引用
 
+/* J 系列 id → 新規範對映表(備查用,不改既有 id 與 localStorage key)
+   J1 = M7A_01(七上數學第1關)  J2 = M7A_02 ... J10 = M7B_07
+   localStorage key 仍為 progress_J1 等,只在此處記錄對映。 */
+// const LEGACY_ID_MAP = { J1:"M7A_01", J2:"M7A_02", J3:"M7B_01", J4:"M7B_02",
+//   J5:"M7A_03", J6:"M7A_04", J7:"M7B_03", J8:"M7B_04", J9:"M7B_05", J10:"M7B_06" };
+
 const SUBJECTS = {
   b1: { name: "七上", levels: [_J1, _J2, _J5, _J6, B1Q] },
   b2: { name: "七下", levels: [_J3, _J4, J7, J8, J9, J10, JQ_LEVEL] },
 };
 let curSubject = "b1";
+
+/* ---------- 資料驅動:?subject= URL 參數動態載入非數學科目 ----------
+   id 規範:新關卡 id = {科目碼}{年級}{冊}_{序}(自然=S,例 S7A_01)
+   localStorage 進度 key = progress_{id}(自動被現有 markGoal 處理)
+   數學既有 J 系列 id 與其 localStorage key 不改(不破壞上線用戶進度)。
+
+   可辨識的 subject 參數值:
+     science7a → 載入 js/subjects/science7a.js
+   其餘值: console.warn 並 fallback 到預設數學科目。
+   無參數: 完全不動,行為與改前一致。                             */
+const _SUBJECT_LOADERS = {
+  science7a: "js/subjects/science7a.js",
+};
+
+function _loadSubjectScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
 
 /* ---------- UI 骨架 ---------- */
 const tabsEl = document.getElementById("tabs");
@@ -1417,6 +1444,33 @@ document.addEventListener("pointerdown", () => {
   if (voiceOn && player.active && voiceAudio && voiceAudio.paused) player.playClip(player.steps[player.idx]);
 }, { once: true });
 
-renderSubjects();
-switchLevel(0);
-frame();
+/* ---------- 啟動 ---------- */
+(async function init() {
+  const urlSubject = new URLSearchParams(location.search).get("subject");
+  if (urlSubject) {
+    const loader = _SUBJECT_LOADERS[urlSubject];
+    if (!loader) {
+      console.warn(`[subject-loader] 未知 subject=${urlSubject},fallback 到數學科目`);
+    } else {
+      try {
+        await _loadSubjectScript(loader);
+        const def = window[`__SUBJECT_${urlSubject.toUpperCase().replace(/[^A-Z0-9]/g, "_")}__`];
+        if (def && def.levels && def.levels.length) {
+          // 以動態科目取代 SUBJECTS(清空原有科目避免 test_batch1_final 類測試用錯數)
+          const key = def.subjectKey || urlSubject;
+          Object.keys(SUBJECTS).forEach(k => delete SUBJECTS[k]);
+          SUBJECTS[key] = { name: def.subjectName || urlSubject, levels: def.levels };
+          curSubject = key;
+          levels = SUBJECTS[key].levels;
+          // 全科證書對動態科目只看該科目本身
+          updateCert._certSubjects = () => [key];
+        }
+      } catch (e) {
+        console.error("[subject-loader] 載入失敗:", e);
+      }
+    }
+  }
+  renderSubjects();
+  switchLevel(0);
+  frame();
+})();
