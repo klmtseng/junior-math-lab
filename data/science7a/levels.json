@@ -1,0 +1,19 @@
+{
+  "_comment": "七上自然科關卡元資料。draw/demo/controls 由 js/subjects/science7a.js 的 SCIENCE7A_REGISTRY 提供。",
+  "subjectKey": "s7a",
+  "subjectName": "七上自然",
+  "levels": [
+    {
+      "id": "S7A_01",
+      "short": "細胞構造",
+      "ep": "S",
+      "subj": "s7a",
+      "title": "關 S7A-1|細胞:植物與動物的不同長相",
+      "intro": "<p>所有生物都由<b>細胞</b>組成。植物細胞和動物細胞有幾個共同的構造,也有幾個「植物才有」的東西。</p><p>把右邊的構造標籤<b>拖進正確的框框</b>:「植物才有」或「動植物都有」。動物細胞沒有的構造,植物細胞才有。</p>",
+      "formal": "<p class=\"math\">植物細胞特有:細胞壁、葉綠體、液胞(大型中央液胞)。動植物共有:細胞膜、細胞核、粒線體。</p>",
+      "goals": [
+        { "id": "S7A_01-a", "text": "正確分類全部 6 個細胞構造" }
+      ]
+    }
+  ]
+}
