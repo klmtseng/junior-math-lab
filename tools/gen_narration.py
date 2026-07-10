@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
-# 已停用:數學旁白(captions.json)改用 gen_narration_edge.py 台灣腔 --subject math7(2026-07-10)
-# 本檔保留供參考,自然科 science7a 路徑亦已移至 gen_narration_edge.py。
-"""數感實驗室示範旁白生成器(雙引擎:中文=edge-tts 曉臻台灣腔 / 英文=Kokoro zf_xiaoxiao)。
+"""數感實驗室旁白生成器 — canonical 唯一入口(2026-07-10 整併 gen_narration_edge.py)。
+
+中文走 edge-tts zh-TW-HsiaoChenNeural 台灣腔(預設 +12%);英文走 Kokoro zf_xiaoxiao。
+gen_narration_edge.py 已標棄用,請勿再新增呼叫。
+
 用法:
-  # 預設:科目含 science → edge-tts 曉臻;其餘(數學) → Kokoro
-  ~/Desktop/AI_MAC/tools/kokoro-venv/bin/python gen_narration.py [--force]
-  ~/Desktop/AI_MAC/tools/kokoro-venv/bin/python gen_narration.py --subject science7a [--force]
+  python3 tools/gen_narration.py [--subject <name>] [--engine <kokoro|edge>]
+                                  [--rate <+12%>] [--force]
 
   --subject <name>  指定科目:讀 tools/captions_<name>.json,輸出 audio/<id>_<i>.mp3
-                    (預設:讀 tools/captions.json,行為與原來一致)
-  --engine  <eng>   強制指定引擎:kokoro | edge(預設依科目自動選)
+                    預設(無 --subject):讀 tools/captions.json(數學 J1-J10)
+  --engine  <eng>   強制引擎:kokoro | edge(預設依科目自動選)
+  --rate    <rate>  edge-tts 語速,如 +12% / +0% / -5%(預設 +12%,僅 edge 引擎生效)
   --force           強制重新生成已存在的 mp3
 
-引擎選擇規則(不傳 --engine 時):
-  subject 名稱含 "science" → edge-tts zh-TW-HsiaoChenNeural(台灣腔)
-  其餘(數學) → Kokoro zf_xiaoxiao(保留既有行為不變)
+引擎自動選擇(不傳 --engine 時):
+  subject 名稱含 "science" 或 subject=None(數學) → edge zh-TW-HsiaoChenNeural
+  明確傳 --engine kokoro → Kokoro(保留英文未來路徑)
 
-讀 captions JSON → 每句符號轉口語 → 生成 audio/<ID>_<i>.mp3
-字幕寫作規則:禁用括號(舊版會吞成黏音);座標/數對用「3、負2」式寫法;符號轉換表見 WORDS。
+符號正規化(say() 函式):數學符號統一轉口語,edge 路徑也套用;
+  x→艾克斯、y→歪、=→等於、²→平方、×→乘以 …等(見 WORDS 表)。
+字幕寫作規則:禁用括號(舊版會吞成黏音);座標/數對用「3、負2」式寫法。
 """
 import asyncio
 import os
@@ -113,14 +116,16 @@ def gen_kokoro(caps, outdir, force):
 
 # ── edge-tts 引擎 ─────────────────────────────────────────────────────────────
 
-async def _edge_synth_one(text: str, out_mp3: str, retries: int = 3) -> bool:
-    """edge-tts 合成單句;失敗明確報錯,不靜默。"""
+async def _edge_synth_one(text: str, out_mp3: str, rate: str = "+12%", retries: int = 3) -> bool:
+    """edge-tts 合成單句;失敗明確報錯,不靜默。
+    rate: edge-tts 語速字串(預設 +12%,使用者定案)。
+    """
     import edge_tts as _et
     for attempt in range(retries):
         try:
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
                 tmp = tf.name
-            comm = _et.Communicate(text, EDGE_VOICE)
+            comm = _et.Communicate(text, EDGE_VOICE, rate=rate)
             await comm.save(tmp)
             result = subprocess.run(
                 [FF, "-y", "-i", tmp, "-b:a", "128k", out_mp3],
@@ -139,7 +144,7 @@ async def _edge_synth_one(text: str, out_mp3: str, retries: int = 3) -> bool:
     return False
 
 
-async def _gen_edge_async(caps, outdir, force):
+async def _gen_edge_async(caps, outdir, force, rate: str = "+12%"):
     try:
         import edge_tts  # noqa: F401  — 確認已安裝
     except ImportError:
@@ -152,14 +157,15 @@ async def _gen_edge_async(caps, outdir, force):
     for c in caps:
         key    = f"{c['id']}_{c['i']}"
         mp3    = os.path.join(outdir, f"{key}.mp3")
-        text   = c["cap"]          # edge-tts 直接給原文,標點自然停頓
+        # say() 符號正規化(x→艾克斯、=→等於、²→平方 等),edge 路徑也套用
+        text   = say(c["cap"])
         manifest[key] = text
         if os.path.exists(mp3) and not force:
             skipped += 1
             print(f"  [edge-tts] skip {key} (exists)")
             continue
-        print(f"  [edge-tts] voice={EDGE_VOICE} synth {key}: {text[:50]}")
-        ok = await _edge_synth_one(text, mp3)
+        print(f"  [edge-tts] voice={EDGE_VOICE} rate={rate} synth {key}: {text[:50]}")
+        ok = await _edge_synth_one(text, mp3, rate=rate)
         if ok:
             made += 1
             print(f"    -> {mp3}")
@@ -171,19 +177,24 @@ async def _gen_edge_async(caps, outdir, force):
     return manifest, made, skipped
 
 
-def gen_edge(caps, outdir, force):
+def gen_edge(caps, outdir, force, rate: str = "+12%"):
     """同步包裝,呼叫 async edge-tts 路徑。"""
-    return asyncio.run(_gen_edge_async(caps, outdir, force))
+    return asyncio.run(_gen_edge_async(caps, outdir, force, rate=rate))
 
 
 # ── 主程式 ────────────────────────────────────────────────────────────────────
 
-# 科目 → 自動引擎對應表:名稱含這些前綴 → edge-tts(台灣腔中文)
+# 科目 → 自動引擎對應表:數學(None)和 science 系列都走 edge-tts 台灣腔
+# 若未來有英文科目傳 --engine kokoro 即可
 _EDGE_SUBJECTS = ("science",)
+
+# edge-tts 中文預設語速(使用者定案 2026-07-10)
+EDGE_DEFAULT_RATE = "+12%"
 
 
 def _auto_engine(subject: str | None) -> str:
-    if subject and any(subject.startswith(p) for p in _EDGE_SUBJECTS):
+    # 數學(None)也走 edge:曉臻台灣腔,含 say() 符號正規化
+    if subject is None or any(subject.startswith(p) for p in _EDGE_SUBJECTS):
         return "edge"
     return "kokoro"
 
@@ -210,16 +221,23 @@ def main():
     if engine is None:
         engine = _auto_engine(subject)
 
+    # --rate <+12%>  (僅 edge 引擎生效;預設 EDGE_DEFAULT_RATE)
+    rate = EDGE_DEFAULT_RATE
+    if "--rate" in sys.argv:
+        idx = sys.argv.index("--rate")
+        if idx + 1 < len(sys.argv):
+            rate = sys.argv[idx + 1]
+
     # 讀字幕
     if subject:
         cap_file = os.path.join(HERE, "tools", f"captions_{subject}.json")
         if not os.path.exists(cap_file):
             print(f"錯誤:找不到 {cap_file}", file=sys.stderr)
             sys.exit(1)
-        print(f"[gen_narration] subject={subject}, engine={engine}, captions={cap_file}")
+        print(f"[gen_narration] subject={subject}, engine={engine}, rate={rate}, captions={cap_file}")
     else:
         cap_file = os.path.join(HERE, "tools", "captions.json")
-        print(f"[gen_narration] (default math), engine={engine}, captions={cap_file}")
+        print(f"[gen_narration] (default math), engine={engine}, rate={rate}, captions={cap_file}")
 
     caps   = json.load(open(cap_file, encoding="utf-8"))
     outdir = os.path.join(HERE, "audio")
@@ -229,7 +247,7 @@ def main():
     if engine == "kokoro":
         manifest, made, skipped = gen_kokoro(caps, outdir, force)
     else:
-        manifest, made, skipped = gen_edge(caps, outdir, force)
+        manifest, made, skipped = gen_edge(caps, outdir, force, rate=rate)
 
     json.dump(manifest, open(os.path.join(outdir, "narration.json"), "w"),
               ensure_ascii=False, indent=1)

@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""edge-tts 台灣腔旁白生成器(zh-TW-HsiaoChenNeural)。
-用法:
-  python3 tools/gen_narration_edge.py [--subject science7a|math7] [--ids S7A_01,S7A_02] [--force]
-
-  --subject science7a  讀 tools/captions_science7a.json(預設)
-  --subject math7      讀 tools/captions.json(數學旁白,套用 edge_norm 極簡正規化)
-
-讀 captions JSON → 用 edge-tts 產 mp3 → 覆蓋 audio/<ID>_<i>.mp3
-"""
+# [已棄用 2026-07-10] — 請改用 tools/gen_narration.py(已整併本檔功能)。
+# 保留備查,請勿再新增呼叫。gen_narration.py 已含:
+#   - edge-tts 台灣腔(+12% 語速)
+#   - say() 數學符號正規化(x→艾克斯等)
+#   - --subject / --engine / --rate / --force 旗標
+"""[DEPRECATED] edge-tts 台灣腔旁白生成器。請改用 tools/gen_narration.py。"""
 import asyncio, json, os, sys, subprocess, tempfile, time
 
 FF = os.path.expanduser("~/Desktop/AI_MAC/tools/ffmpeg/ffmpeg")
