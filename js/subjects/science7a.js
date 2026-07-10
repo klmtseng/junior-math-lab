@@ -1165,18 +1165,19 @@ const S7A_03 = {
       note: "碼錶可精確計時到 0.01 秒" },
   ],
 
-  /* 換算練習題 */
+  /* 換算練習題(選擇題:opts[0] 為正解,render 時洗牌) */
   _CONV: [
-    { q: "1 公尺 = __ 公分", ans: "100", hint: "1 m = 100 cm" },
-    { q: "2 公斤 = __ 公克", ans: "2000", hint: "1 kg = 1000 g, 所以 2 kg = 2000 g" },
-    { q: "3 分鐘 = __ 秒",   ans: "180", hint: "1 min = 60 s, 所以 3 min = 180 s" },
+    { q: "1 公尺 = ? 公分", ans: "100 公分",  opts: ["100 公分", "10 公分", "1000 公分", "0.1 公分"], hint: "1 m = 100 cm" },
+    { q: "2 公斤 = ? 公克", ans: "2000 公克", opts: ["2000 公克", "200 公克", "20 公克", "20000 公克"], hint: "1 kg = 1000 g, 所以 2 kg = 2000 g" },
+    { q: "3 分鐘 = ? 秒",   ans: "180 秒",   opts: ["180 秒", "30 秒", "60 秒", "3600 秒"], hint: "1 min = 60 s, 所以 3 min = 180 s" },
   ],
 
   state: {
     matched: {},   // { qty: tool } 已配對
     selected: null, // 目前選中的工具 tool 字串
     convIdx: 0,
-    convInput: "",
+    convPick: null,   // 本題玩家點選的選項文字(null=未作答)
+    convOptOrder: null, // 本題選項的洗牌順序(進題時凍結,避免每次 render 重洗)
     convDone: [],  // 已完成的換算索引
     phase: "match", // match | conv
   },
@@ -1184,7 +1185,7 @@ const S7A_03 = {
   enter() {
     Object.assign(this.state, {
       matched: {}, selected: null,
-      convIdx: 0, convInput: "", convDone: [],
+      convIdx: 0, convPick: null, convOptOrder: null, convDone: [],
       phase: "match",
     });
     this._renderCtl && this._renderCtl();
@@ -1223,7 +1224,7 @@ const S7A_03 = {
         dur: 2800,
       },
       {
-        call: () => { s.phase = "conv"; s.convIdx = 0; s.convInput = ""; s.convDone = []; R(); },
+        call: () => { s.phase = "conv"; s.convIdx = 0; s.convPick = null; s.convOptOrder = null; s.convDone = []; R(); },
         cap: "現在來挑戰:把測量工具和它對應的物理量配對起來吧!",
         dur: 2200,
       },
@@ -1314,7 +1315,7 @@ const S7A_03 = {
           };
         });
         const toConv = el.querySelector("#s7a03-to-conv");
-        if (toConv) toConv.onclick = () => { s.phase = "conv"; s.convIdx = 0; s.convInput = ""; render(); };
+        if (toConv) toConv.onclick = () => { s.phase = "conv"; s.convIdx = 0; s.convPick = null; s.convOptOrder = null; render(); };
         return;
       }
 
@@ -1338,35 +1339,45 @@ const S7A_03 = {
         const ci = s.convIdx < lv._CONV.length ? s.convIdx : 0;
         const cur = lv._CONV[ci];
         const answered = s.convDone.includes(ci);
-        const correct = s.convInput.trim() === cur.ans;
+        // 選項洗牌:進入本題時凍結一次,答完前不重洗
+        if (!s.convOptOrder || s.convOptOrder._ci !== ci) {
+          const order = cur.opts.map((text, k) => ({ text, ok: k === 0 }));
+          for (let k = order.length - 1; k > 0; k--) {
+            const j = Math.floor(Math.random() * (k + 1));
+            [order[k], order[j]] = [order[j], order[k]];
+          }
+          order._ci = ci;
+          s.convOptOrder = order;
+        }
+        const order = s.convOptOrder;
+        const correct = answered && s.convPick != null && cur.opts[0] === s.convPick;
         el.innerHTML = `
           <div style="font-size:.82rem;color:#9aa5c4;margin-bottom:4px">換算練習 ${ci + 1}/${lv._CONV.length}</div>
           <div style="font-size:1rem;font-weight:bold;margin-bottom:10px">${cur.q}</div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-            <input id="s7a03-ans" type="number" placeholder="填入數字"
-              value="${s.convInput}"
-              style="width:120px;padding:6px 10px;border-radius:6px;border:1.5px solid ${answered ? (correct ? "#4ade80" : "#ff5c7a") : "#55648f"};
-                background:var(--panel2);color:var(--ink);font-size:1rem;font-family:inherit">
-            ${!answered ? `<button class="primary" id="s7a03-check">確認</button>` : ""}
-          </div>
-          ${answered ? `<div class="quiz-msg" style="color:${correct ? "#4ade80" : "#ff5c7a"}">${correct ? "✓ 正確!" : "✗ " + cur.hint}</div>` : ""}
+          ${order.map((o, k) => {
+            let extra = "";
+            if (answered) {
+              if (o.ok) extra = " right";
+              else if (s.convPick === o.text) extra = " wrong";
+            }
+            return `<button class="quiz-opt s7a03-opt${extra}" data-k="${k}"${answered ? " disabled" : ""}>${o.text}</button>`;
+          }).join("")}
+          ${answered ? `<div class="quiz-msg" style="color:${correct ? "#4ade80" : "#ff5c7a"}">${correct ? "✓ 正確!" : "✗ "}${cur.hint}</div>` : ""}
           ${answered ? `<div class="row"><button class="primary" id="s7a03-next">${ci + 1 < lv._CONV.length ? "下一題" : "完成"}</button></div>` : ""}
         `;
-        const inp = el.querySelector("#s7a03-ans");
-        if (inp && !answered) {
-          inp.oninput = () => { s.convInput = inp.value; };
-          inp.onkeydown = e => { if (e.key === "Enter") el.querySelector("#s7a03-check") && el.querySelector("#s7a03-check").click(); };
-        }
-        const checkBtn = el.querySelector("#s7a03-check");
-        if (checkBtn) checkBtn.onclick = () => {
-          s.convInput = (inp ? inp.value : s.convInput);
-          if (!s.convDone.includes(ci)) s.convDone.push(ci);
-          render();
-        };
+        el.querySelectorAll(".s7a03-opt").forEach((btn, k) => {
+          btn.onclick = () => {
+            if (s.convDone.includes(ci)) return;
+            s.convPick = order[k].text;
+            if (!s.convDone.includes(ci)) s.convDone.push(ci);
+            render();
+          };
+        });
         const nextBtn = el.querySelector("#s7a03-next");
         if (nextBtn) nextBtn.onclick = () => {
           s.convIdx = ci + 1;
-          s.convInput = "";
+          s.convPick = null;
+          s.convOptOrder = null;
           render();
         };
       }
