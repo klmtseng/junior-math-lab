@@ -29,13 +29,15 @@ def edge_norm(text: str) -> str:
     text = text.replace("×", " 乘以 ")
     return text
 
-async def synth_one(text: str, out_mp3: str, retries: int = 3) -> bool:
-    """用 edge-tts 合成一段文字,成功回 True。"""
+async def synth_one(text: str, out_mp3: str, retries: int = 3, rate: str = "") -> bool:
+    """用 edge-tts 合成一段文字,成功回 True。
+    rate: edge-tts 語速調整字串(如 "+12%");空字串=預設語速(使用者對 S7A_01 定案為 +12%)。
+    """
     for attempt in range(retries):
         try:
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
                 tmp = tf.name
-            comm = edge_tts.Communicate(text, VOICE)
+            comm = edge_tts.Communicate(text, VOICE, rate=rate) if rate else edge_tts.Communicate(text, VOICE)
             await comm.save(tmp)
             # 用 ffmpeg 轉碼保證 128k CBR
             result = subprocess.run(
@@ -79,6 +81,13 @@ async def main():
         if idx + 1 < len(sys.argv):
             filter_ids = set(sys.argv[idx + 1].split(","))
 
+    # 語速(edge-tts rate,如 "+12%");不傳=預設語速
+    rate = ""
+    if "--rate" in sys.argv:
+        idx = sys.argv.index("--rate")
+        if idx + 1 < len(sys.argv):
+            rate = sys.argv[idx + 1]
+
     # math7: 讀 captions.json(不帶科目後綴);其餘讀 captions_<subject>.json
     if subject == "math7":
         cap_file = os.path.join(HERE, "tools", "captions.json")
@@ -109,8 +118,8 @@ async def main():
             continue
         # 數學字幕套極簡正規化;自然科原文直送
         text = edge_norm(c["cap"]) if use_math_norm else c["cap"]
-        print(f"  synth {key}: {text[:60]}")
-        ok = await synth_one(text, mp3)
+        print(f"  synth {key}: {text[:60]}{('  rate=' + rate) if rate else ''}")
+        ok = await synth_one(text, mp3, rate=rate)
         if ok:
             vol = volumedetect(mp3)
             print(f"    -> {mp3}  {vol}")

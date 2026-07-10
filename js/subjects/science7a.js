@@ -1424,6 +1424,401 @@ const S7A_03_DRILL = makeStaticSciDrill(
 );
 
 /* ================================================================
+   S7A_04 — 生物圈的組成(生態系層次)
+   互動:五個生態層次的卡片查閱 + 由小到大排列練習
+        (沿用 S7A_02 的 cards+sort 引擎,對此單元最穩)
+   課綱:Fc-Ⅳ(生態系的組成與交互作用/生物圈層次)
+   版本註記:此單元康軒版編排於七下;課綱內容不受影響
+   ================================================================ */
+const S7A_04 = {
+  id: "S7A_04", short: "生物圈組成",
+  title: "關 S7A-4|生物圈的組成:從個體到生物圈",
+  ep: "S", subj: "s7a",
+  intro: `<p>把生物依「範圍大小」分層:一隻生物是<b>個體</b>,同一種生物的集合是<b>族群</b>,同一區域裡不同族群合起來是<b>群集</b>,群集再加上陽光、空氣、水、土壤等<b>非生物環境</b>就是<b>生態系</b>,地球上所有生態系合起來就是<b>生物圈</b>。</p><p>點選每個層次的卡片了解定義與實例,再用拖拉把五個層次由小到大排列正確!</p><p style="color:#9aa5c4;font-size:.85rem">📖 版本註記:此單元<b>康軒版</b>編排於七下教學;依課綱知識點相同,不影響題目內容。</p>`,
+  formal: `<p class="math">生態層次(由小到大):個體 → 族群 → 群集 → 生態系 → 生物圈<br>族群=同種生物集合;群集=同一區域不同族群;生態系=生物群集+非生物環境<br>課綱對應:Fc-Ⅳ(生態系的組成與交互作用)</p>`,
+  goals: [
+    { id: "S7A_04-a", text: "了解五個生態層次(全部查閱卡片)" },
+    { id: "S7A_04-b", text: "正確排列生態層次順序" },
+  ],
+
+  _LEVELS: [
+    {
+      key: "individual",
+      name: "個體",
+      icon: "🐒",
+      color: "#4ade80",
+      def: "一個能獨立生存的生物體",
+      examples: "一隻台灣獼猴、一棵樟樹、一個人",
+      note: "個體是生態層次中最小的單位,就是一個完整的生物。",
+    },
+    {
+      key: "population",
+      name: "族群",
+      icon: "🐒🐒",
+      color: "#38bdf8",
+      def: "生活在同一區域內、同一種生物的所有個體",
+      examples: "一片森林裡「所有的」台灣獼猴、一座池塘裡所有的吳郭魚",
+      note: "族群的關鍵是「同一種」生物;不同種生物不算同一個族群。",
+    },
+    {
+      key: "community",
+      name: "群集",
+      icon: "🌳🐒🦋",
+      color: "#fbbf24",
+      def: "生活在同一區域內、所有不同族群(不同種生物)的集合",
+      examples: "一片森林裡所有的生物:獼猴、樟樹、蝴蝶、蚯蚓、細菌…全部",
+      note: "群集包含「多種」生物;把同一區域裡各個族群加起來就是群集。又稱群落。",
+    },
+    {
+      key: "ecosystem",
+      name: "生態系",
+      icon: "🏞️",
+      color: "#a78bfa",
+      def: "某一區域的生物群集,加上陽光、空氣、水、土壤等非生物環境",
+      examples: "整片森林(所有生物 + 陽光、土壤、水分、空氣)、一座湖泊生態系",
+      note: "生態系 = 生物(群集) + 非生物環境;生物與環境之間會交互作用。",
+    },
+    {
+      key: "biosphere",
+      name: "生物圈",
+      icon: "🌍",
+      color: "#ff5c7a",
+      def: "地球上所有生態系的總和,是地球上有生物生存的整個範圍",
+      examples: "整個地球:陸地、海洋、大氣中所有生態系合起來",
+      note: "生物圈是生態層次的最高階,涵蓋地球上一切生命與其環境。",
+    },
+  ],
+
+  _CORRECT_ORDER: ["individual", "population", "community", "ecosystem", "biosphere"],
+
+  state: {
+    viewed: new Set(),
+    sortArr: [],
+    sortDone: false,
+    sortCorrect: false,
+    dragging: null,
+    phase: "cards",
+  },
+
+  enter() {
+    this.state.viewed = new Set();
+    this.state.sortArr = ["community", "biosphere", "individual", "ecosystem", "population"]; // 打亂初始順序
+    this.state.sortDone = false;
+    this.state.sortCorrect = false;
+    this.state.dragging = null;
+    this.state.phase = "cards";
+    this._renderCtl && this._renderCtl();
+  },
+
+  demo() {
+    const s = this.state, lv = this;
+    const R = () => lv._renderCtl && lv._renderCtl();
+    return [
+      {
+        call: () => { s.viewed = new Set(); s.phase = "cards"; R(); },
+        cap: "生物圈的組成有五個層次,從最小到最大:個體、族群、群集、生態系、生物圈。",
+        dur: 3200,
+      },
+      {
+        call: () => { s.viewed = new Set(["individual"]); R(); },
+        cap: "第一層,個體。一隻台灣獼猴、一棵樟樹,就是一個個體。",
+        dur: 2800,
+      },
+      {
+        call: () => { s.viewed = new Set(["individual","population"]); R(); },
+        cap: "第二層,族群。同一片森林裡「所有的」台灣獼猴,合起來是一個族群。族群是同一種生物的集合。",
+        dur: 3400,
+      },
+      {
+        call: () => { s.viewed = new Set(["individual","population","community"]); R(); },
+        cap: "第三層,群集。森林裡所有不同種的生物:獼猴、樟樹、蝴蝶全部合起來,就是群集。群集包含多種生物。",
+        dur: 3400,
+      },
+      {
+        call: () => { s.viewed = new Set(["individual","population","community","ecosystem"]); R(); },
+        cap: "第四層,生態系。群集再加上陽光、空氣、水、土壤這些非生物環境,就是生態系。",
+        dur: 3200,
+      },
+      {
+        call: () => { s.viewed = new Set(["individual","population","community","ecosystem","biosphere"]); R(); },
+        cap: "第五層,生物圈。地球上所有生態系合起來,就是生物圈。五個層次都認識了!",
+        dur: 3200,
+      },
+      {
+        call: () => { s.phase = "sort"; R(); },
+        cap: "現在換你試試看:把五個層次由小到大排列正確!",
+        dur: 2200,
+      },
+    ];
+  },
+
+  controls(el) {
+    const s = this.state, lv = this;
+    const render = () => {
+      const allViewed = lv._CORRECT_ORDER.every(k => s.viewed.has(k));
+      if (s.phase === "cards") {
+        const cards = lv._LEVELS.map((lv2) => {
+          const seen = s.viewed.has(lv2.key);
+          return `
+            <div class="s7a04-card${seen ? " seen" : ""}" data-key="${lv2.key}"
+              style="border:2px solid ${seen ? lv2.color : "#55648f"};border-radius:8px;
+                padding:8px 12px;margin:4px 0;cursor:pointer;
+                background:${seen ? `${lv2.color}18` : "var(--panel2)"};
+                transition:border-color .2s">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:1.4rem">${lv2.icon}</span>
+                <b style="color:${seen ? lv2.color : "var(--ink)"}">${lv2.name}</b>
+                ${seen ? `<span style="font-size:.75rem;color:${lv2.color}">✓ 已查閱</span>` : `<span style="font-size:.75rem;color:#9aa5c4">點擊查看</span>`}
+              </div>
+              ${seen ? `
+              <div style="margin-top:6px;font-size:.83rem;color:var(--ink)">
+                <div><b>定義:</b>${lv2.def}</div>
+                <div style="margin-top:3px;white-space:pre-line"><b>舉例:</b>${lv2.examples}</div>
+                <div style="margin-top:3px;color:#9aa5c4;font-size:.78rem">${lv2.note}</div>
+              </div>` : ""}
+            </div>`;
+        }).join("");
+        el.innerHTML = `
+          <div style="margin-bottom:6px;font-size:.85rem;color:#9aa5c4">點選每個層次查閱說明,全部查閱後可進行排列練習</div>
+          ${cards}
+          ${allViewed ? `<button class="primary" id="s7a04-to-sort" style="margin-top:8px;width:100%">進行層次排列練習 →</button>` : ""}
+        `;
+        el.querySelectorAll(".s7a04-card").forEach(card => {
+          card.onclick = () => {
+            s.viewed.add(card.dataset.key);
+            render();
+          };
+        });
+        const toSortBtn = el.querySelector("#s7a04-to-sort");
+        if (toSortBtn) toSortBtn.onclick = () => { s.phase = "sort"; render(); };
+      } else {
+        const checkOrder = () => {
+          const correct = lv._CORRECT_ORDER;
+          return s.sortArr.every((k, i) => k === correct[i]);
+        };
+        const items = s.sortArr.map((key, i) => {
+          const item = lv._LEVELS.find(l => l.key === key);
+          return `
+            <div class="s7a04-sort-item" data-idx="${i}" data-key="${key}"
+              draggable="true"
+              style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin:4px 0;
+                border-radius:8px;border:2px solid ${s.sortDone && s.sortCorrect ? item.color : "#55648f"};
+                background:var(--panel2);cursor:grab;user-select:none;
+                ${s.sortDone ? "cursor:default;" : ""}">
+              <span style="font-size:1.2rem">${item.icon}</span>
+              <span style="font-weight:bold;color:${s.sortDone && s.sortCorrect ? item.color : "var(--ink)"}">${item.name}</span>
+              <span style="font-size:.78rem;color:#9aa5c4;flex:1;text-align:right">${item.def.slice(0, 16)}…</span>
+              ${!s.sortDone ? `<span style="color:#9aa5c4;font-size:.9rem">☰</span>` : ""}
+            </div>`;
+        }).join("");
+        el.innerHTML = `
+          <div style="margin-bottom:6px;font-size:.85rem;color:#9aa5c4">拖拉調整順序:從最小(個體)到最大(生物圈)</div>
+          <div id="s7a04-sort-zone">${items}</div>
+          ${s.sortDone
+            ? (s.sortCorrect
+                ? `<div class="row"><b style="color:#4ade80">✓ 順序正確!五個生態層次全通關!</b></div>`
+                : `<div class="row"><b style="color:#ff5c7a">✗ 順序不對,再拖拉試試</b><button id="s7a04-sort-reset" style="margin-left:8px">重置</button></div>`)
+            : `<div class="row"><button class="primary" id="s7a04-check">確認順序</button><button id="s7a04-back-cards" style="margin-left:8px">回到卡片</button></div>`
+          }
+        `;
+
+        if (!s.sortDone) {
+          let dragSrcIdx = null;
+          el.querySelectorAll(".s7a04-sort-item").forEach(item => {
+            item.addEventListener("dragstart", e => {
+              dragSrcIdx = parseInt(item.dataset.idx);
+              e.dataTransfer.effectAllowed = "move";
+            });
+            item.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; });
+            item.addEventListener("drop", e => {
+              e.preventDefault();
+              const dstIdx = parseInt(item.dataset.idx);
+              if (dragSrcIdx === null || dragSrcIdx === dstIdx) return;
+              const arr = s.sortArr.slice();
+              const [moved] = arr.splice(dragSrcIdx, 1);
+              arr.splice(dstIdx, 0, moved);
+              s.sortArr = arr;
+              dragSrcIdx = null;
+              render();
+            });
+          });
+
+          const checkBtn = el.querySelector("#s7a04-check");
+          if (checkBtn) checkBtn.onclick = () => {
+            s.sortDone = true;
+            s.sortCorrect = checkOrder();
+            render();
+          };
+          const backBtn = el.querySelector("#s7a04-back-cards");
+          if (backBtn) backBtn.onclick = () => { s.phase = "cards"; render(); };
+          const resetBtn = el.querySelector("#s7a04-sort-reset");
+          if (resetBtn) resetBtn.onclick = () => {
+            s.sortDone = false; s.sortCorrect = false;
+            render();
+          };
+        } else {
+          const resetBtn2 = el.querySelector("#s7a04-sort-reset");
+          if (resetBtn2) resetBtn2.onclick = () => {
+            s.sortDone = false; s.sortCorrect = false;
+            render();
+          };
+        }
+      }
+    };
+    this._renderCtl = render;
+    render();
+  },
+
+  draw() {
+    const s = this.state;
+    const W = canvas.width, H = canvas.height;
+    g.fillStyle = TH.bg; g.fillRect(0, 0, W, H);
+
+    const levels = this._LEVELS;
+    const N = levels.length;
+    const xCenter = W * 0.5;
+    const yBase = H * 0.52;
+
+    /* ── 同心圓層次圖(由小到大,個體在最內圈,生物圈在最外圈) ── */
+    levels.slice().reverse().forEach((lv2, i) => {
+      const ri = N - 1 - i;          // 0=個體(內) … 4=生物圈(外)
+      const viewed = s.viewed.has(lv2.key);
+      const radius = 34 + ri * 34;
+      g.strokeStyle = viewed ? lv2.color : TH.axis;
+      g.lineWidth = viewed ? 2.5 : 1;
+      g.fillStyle = viewed ? `${lv2.color}14` : "rgba(0,0,0,0)";
+      g.beginPath();
+      g.arc(xCenter, yBase, radius, 0, 7);
+      g.fill(); g.stroke();
+
+      /* 標籤放在每圈上方 */
+      const textCol = viewed ? lv2.color : TH.dim;
+      pText(xCenter, yBase - radius + 13, `${lv2.icon} ${lv2.name}`, textCol, 12, "center", true);
+    });
+
+    /* ── readout ── */
+    if (s.sortDone && s.sortCorrect) markGoal("S7A_04-b");
+    if (s.viewed.size === N) markGoal("S7A_04-a");
+
+    const viewedN = s.viewed.size;
+    readout.innerHTML = s.phase === "sort"
+      ? `拖拉排列:由小到大排列五個生態層次`
+      : `已查閱 <b>${viewedN}/${N}</b> 個層次`;
+  },
+};
+
+/* ================================================================
+   S7A_04_QUESTIONS — 段考題庫(生物圈的組成)
+   知識點:Fc-Ⅳ 生態層次;個體/族群/群集/生態系/生物圈的定義與辨別
+   ================================================================ */
+const S7A_04_QUESTIONS = [
+  {
+    tid: "s7a_04_q1",
+    q: "生物圈的組成層次,由小到大的正確順序是?",
+    opts: [
+      "A. 個體 → 群集 → 族群 → 生態系 → 生物圈",
+      "B. 個體 → 族群 → 群集 → 生態系 → 生物圈",
+      "C. 族群 → 個體 → 群集 → 生物圈 → 生態系",
+      "D. 個體 → 族群 → 生態系 → 群集 → 生物圈",
+    ],
+    ans: "B",
+    why: "由小到大的正確順序:個體 → 族群 → 群集 → 生態系 → 生物圈。",
+  },
+  {
+    tid: "s7a_04_q2",
+    q: "「生活在同一區域內、同一種生物的所有個體」,這是指哪個生態層次?",
+    opts: ["A. 個體", "B. 族群", "C. 群集", "D. 生態系"],
+    ans: "B",
+    why: "族群的定義是「同一區域內、同一種生物」的所有個體集合;關鍵在「同一種」。",
+  },
+  {
+    tid: "s7a_04_q3",
+    q: "一片森林裡「所有的台灣獼猴」,屬於哪個生態層次?",
+    opts: ["A. 個體", "B. 族群", "C. 群集", "D. 生態系"],
+    ans: "B",
+    why: "台灣獼猴是同一種生物,「所有的台灣獼猴」是同種個體的集合,屬於族群。",
+  },
+  {
+    tid: "s7a_04_q4",
+    q: "一片森林裡「所有的生物」(獼猴、樹木、昆蟲、細菌等全部),屬於哪個層次?",
+    opts: ["A. 族群", "B. 群集", "C. 個體", "D. 生物圈"],
+    ans: "B",
+    why: "「所有的生物」包含多種不同族群,是同一區域內各族群的集合,屬於群集(群落)。",
+  },
+  {
+    tid: "s7a_04_q5",
+    q: "下列關於「生態系」的敘述,何者正確?",
+    opts: [
+      "A. 生態系只包含生物,不含非生物環境",
+      "B. 生態系是指同一種生物的所有個體",
+      "C. 生態系是生物群集加上陽光、空氣、水、土壤等非生物環境",
+      "D. 生態系就是整個地球所有生物的總和",
+    ],
+    ans: "C",
+    why: "生態系 = 生物群集 + 非生物環境(陽光、空氣、水、土壤等);生物與環境會交互作用。D 描述的是生物圈。",
+  },
+  {
+    tid: "s7a_04_q6",
+    q: "「一整片森林,連同其中的陽光、土壤、水分和空氣」,這構成了哪個層次?",
+    opts: ["A. 群集", "B. 族群", "C. 生態系", "D. 生物圈"],
+    ans: "C",
+    why: "生物群集(森林裡所有生物)加上非生物環境(陽光、土壤、水、空氣)就構成生態系。",
+  },
+  {
+    tid: "s7a_04_q7",
+    q: "「地球上所有生態系的總和」是指哪個生態層次?",
+    opts: ["A. 群集", "B. 生態系", "C. 生物圈", "D. 族群"],
+    ans: "C",
+    why: "生物圈是地球上所有生態系的總和,涵蓋陸地、海洋、大氣中所有生物與其環境,是生態層次的最高階。",
+  },
+  {
+    tid: "s7a_04_q8",
+    q: "關於「族群」與「群集」的差異,下列何者正確?",
+    opts: [
+      "A. 族群包含多種生物;群集只有一種生物",
+      "B. 族群是同一種生物的集合;群集是同一區域內多種族群的集合",
+      "C. 族群和群集是同一個層次的不同名稱",
+      "D. 群集的層次比個體還小",
+    ],
+    ans: "B",
+    why: "族群 = 同一種生物;群集 = 同一區域內多種族群(多種生物)的集合。層次:族群 < 群集。",
+  },
+  {
+    tid: "s7a_04_q9",
+    q: "下列哪一個例子屬於「族群」?",
+    opts: [
+      "A. 一座池塘裡所有的吳郭魚",
+      "B. 一座池塘裡所有的生物",
+      "C. 一座池塘連同池水和陽光",
+      "D. 一隻吳郭魚",
+    ],
+    ans: "A",
+    why: "「所有的吳郭魚」是同一種生物的集合,屬於族群;B 是群集,C 是生態系,D 是個體。",
+  },
+  {
+    tid: "s7a_04_q10",
+    q: "小明在校園觀察:①一隻麻雀 ②校園裡所有的麻雀 ③校園裡所有的生物 ④整個校園連同陽光土壤。這四項依序對應的生態層次是?",
+    opts: [
+      "A. 個體、族群、群集、生態系",
+      "B. 族群、個體、生態系、群集",
+      "C. 個體、群集、族群、生態系",
+      "D. 個體、族群、生態系、群集",
+    ],
+    ans: "A",
+    why: "①一隻=個體;②所有麻雀(同種)=族群;③所有生物(多種)=群集;④加上非生物環境=生態系。",
+  },
+];
+
+const S7A_04_DRILL = makeStaticSciDrill(
+  "S7A_04D",
+  "生物圈組成段考練習",
+  "段考練習|S7A-4D:生物圈組成段考題庫",
+  `<p>本關模擬七上自然段考——<b>10 題</b>,涵蓋個體→族群→群集→生態系→生物圈的定義、實例辨別。</p><p>點選正確選項,答完後可看詳解與成績;答對率 ≥75% 解鎖通關。</p><p style="color:#9aa5c4;font-size:.85rem">📖 康軒版此單元編排於七下,題目依課綱不受影響。</p>`,
+  "完成段考練習且答對率 ≥75%(生物圈組成)",
+  S7A_04_QUESTIONS
+);
+
+/* ================================================================
    SCIENCE7A_REGISTRY — 供 main.js subject-loader 使用
    key = level id, value = 完整關卡物件(含 draw/demo/controls)
    ================================================================ */
@@ -1434,11 +1829,13 @@ const SCIENCE7A_REGISTRY = {
   S7A_02D: S7A_02_DRILL,
   S7A_03,
   S7A_03D: S7A_03_DRILL,
+  S7A_04,
+  S7A_04D: S7A_04_DRILL,
 };
 
 /* 科目定義:subject-loader 會讀這個全域 */
 window.__SUBJECT_SCIENCE7A__ = {
   subjectKey: "s7a",
   subjectName: "七上自然",
-  levels: [S7A_01, S7A_01_DRILL, S7A_02, S7A_02_DRILL, S7A_03, S7A_03_DRILL],
+  levels: [S7A_01, S7A_01_DRILL, S7A_02, S7A_02_DRILL, S7A_03, S7A_03_DRILL, S7A_04, S7A_04_DRILL],
 };
