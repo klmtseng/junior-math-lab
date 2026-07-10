@@ -62,9 +62,9 @@ try:
         subs = [x.text_content() for x in pg.query_selector_all("#subjects button")]
         p("T1 科目顯示「七上英文」", any("七上英文" in s for s in subs), f"subs={subs}")
 
-        # T2 tabs 有 2 關
+        # T2 tabs 有 4 關(E7A_01 造句+段考、E7A_02 造句+段考)
         tabs = [x.text_content() for x in pg.query_selector_all("#tabs button")]
-        p("T2 tabs 2 關(造句+段考)", len(tabs) == 2, f"tabs={tabs}")
+        p("T2 tabs 4 關(2造句+2段考)", len(tabs) == 4, f"tabs={tabs}")
 
         # T3 造句關 intro + 播放鈕 + 音檔存在
         intro = pg.query_selector("#lv-intro").text_content()
@@ -159,6 +159,87 @@ try:
                     nxt.click(); pg.wait_for_timeout(120)
         drill_goal = pg.evaluate("() => !!progress['E7A_01D-pass']")
         p("T5 段考全對 → 通關", drill_goal, f"goal={drill_goal}")
+
+        # ---- E7A_02 否定句與疑問句 ----
+        ANSWERS2 = [
+            ["I", "am", "not", "late", "."],
+            ["He", "is", "not", "my", "teacher", "."],
+            ["They", "are", "not", "here", "."],
+            ["Are", "you", "a", "student", "?"],
+            ["Is", "she", "happy", "?"],
+            ["Yes", ",", "I", "am", "."],
+            ["No", ",", "he", "is", "not", "."],
+        ]
+        # T7 E7A_02 音檔存在(7 個)
+        audio2_ok = all(
+            os.path.exists(os.path.join(ROOT, "audio", f"E7A_02_{i}.mp3")) for i in range(7)
+        )
+        p("T7 E7A_02 7 個音檔存在", audio2_ok, f"audio2_ok={audio2_ok}")
+
+        # T8 亂序不算過關:第 3 句(疑問句)反序放入 → pass < 7
+        wrong2 = pg.evaluate("""() => {
+            const lv = SUBJECTS['e7a'].levels[2];
+            lv._reset();
+            const rev = lv.state.bank[3].slice().reverse();
+            lv.state.slots[3] = rev; lv.state.bank[3] = [];
+            lv._checkSentence(3);
+            return lv.state.pass.filter(Boolean).length;
+        }""")
+        p("T8 E7A_02 亂序不通關", wrong2 < 7, f"pass={wrong2}")
+
+        # T9 E7A_02 7 句照正解語序 → goal 觸發(E7A_02-a)
+        goal_b = pg.evaluate("""(answers) => {
+            if (player.active) player.stop();
+            const lv = SUBJECTS['e7a'].levels[2];
+            lv._reset();
+            for (let si = 0; si < answers.length; si++) {
+                lv.state.slots[si] = [];
+                for (const w of answers[si]) {
+                    const bi = lv.state.bank[si].findIndex(t => t.w === w);
+                    const [tile] = lv.state.bank[si].splice(bi, 1);
+                    lv.state.slots[si].push(tile);
+                }
+                lv._checkSentence(si);
+            }
+            const all = lv._allPass();
+            if (all) markGoal('E7A_02-a');
+            return { all, pass: lv.state.pass.filter(Boolean).length, goal: !!progress['E7A_02-a'] };
+        }""", ANSWERS2)
+        p("T9 E7A_02 7 句全對 → goal 觸發", goal_b["all"] and goal_b["goal"],
+          f"pass={goal_b['pass']}/7 goal={goal_b['goal']}")
+
+        # T10 E7A_02 段考:切到第 4 關,逐題點正解 → 通關
+        pg.query_selector_all("#tabs button")[3].click()
+        pg.wait_for_timeout(300)
+        pg.evaluate("""() => { const lv = SUBJECTS['e7a'].levels[3]; lv.enter(); }""")
+        pg.wait_for_timeout(200)
+        start2 = pg.query_selector("#en-drill-start")
+        if start2:
+            start2.click()
+            pg.wait_for_timeout(200)
+            for _ in range(12):
+                q = pg.query_selector(".quiz-q")
+                if not q:
+                    break
+                ans_letter = pg.evaluate("""() => {
+                    const lv = SUBJECTS['e7a'].levels[3];
+                    const it = lv.state.questions[lv.state.qi];
+                    return it && it.correct === null ? lv.state.questions[lv.state.qi].q.ans.trim()[0] : null;
+                }""")
+                if ans_letter is None:
+                    nxt = pg.query_selector("#en-next")
+                    if nxt:
+                        nxt.click(); pg.wait_for_timeout(120); continue
+                    break
+                for btn in pg.query_selector_all(".en-opt"):
+                    if (btn.text_content() or "").strip()[:1].upper() == ans_letter.upper():
+                        btn.click(); break
+                pg.wait_for_timeout(120)
+                nxt = pg.query_selector("#en-next")
+                if nxt:
+                    nxt.click(); pg.wait_for_timeout(120)
+        drill2_goal = pg.evaluate("() => !!progress['E7A_02D-pass']")
+        p("T10 E7A_02 段考全對 → 通關", drill2_goal, f"goal={drill2_goal}")
 
         # T6 零 console error
         real_errs = [e for e in errs if "favicon" not in e.lower()]

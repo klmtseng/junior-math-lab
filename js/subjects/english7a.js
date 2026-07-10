@@ -292,6 +292,267 @@ const E7A_01 = {
 };
 
 /* ================================================================
+   E7A_02 — be 動詞否定句與疑問句(聽音拖曳造句)
+   互動:7 個句子(否定 / 疑問 / 簡答)。機制與 E7A_01 相同——
+         每句 🔊 播 audio/E7A_02_<i>.mp3,拖曳單字磚排成正確語序。
+         7 句全對 → 通關(markGoal E7A_02-a)。
+   文法底線:
+     否定 = be 動詞 + not(I am not / He is not / They are not;縮寫 isn't·aren't)。
+     疑問 = be 動詞移到句首,句尾用問號(Are you…? / Is she…?)。
+     簡答 = Yes, 主詞 + be;No, 主詞 + be + not(Yes 簡答不縮寫:Yes, I am. 不可 Yes, I'm.)。
+   句子磚一律用完整式(is not / are not),縮寫規則於說明與段考中教。
+   ================================================================ */
+const E7A2_SENTENCES = [
+  { i: 0, words: ["I", "am", "not", "late", "."],           zh: "我沒有遲到" },
+  { i: 1, words: ["He", "is", "not", "my", "teacher", "."], zh: "他不是我的老師" },
+  { i: 2, words: ["They", "are", "not", "here", "."],       zh: "他們不在這裡" },
+  { i: 3, words: ["Are", "you", "a", "student", "?"],       zh: "你是學生嗎?" },
+  { i: 4, words: ["Is", "she", "happy", "?"],               zh: "她快樂嗎?" },
+  { i: 5, words: ["Yes", ",", "I", "am", "."],              zh: "是的,我是。(簡答)" },
+  { i: 6, words: ["No", ",", "he", "is", "not", "."],       zh: "不,他不是。(簡答)" },
+];
+
+const E7A_02 = {
+  id: "E7A_02", short: "否定句與疑問句",
+  title: "關 E7A-2|be 動詞否定句與疑問句",
+  ep: "E", subj: "e7a",
+  intro: `<p>會用 be 動詞造肯定句後,再學兩種變化:<b>否定句</b>(不是…)和<b>疑問句</b>(…嗎?)。</p>
+    <p class="math">否定:be 動詞後面加 <b>not</b>　　疑問:be 動詞<b>移到句首</b>,句尾用 <b>?</b></p>
+    <p>下面有 7 個句子(否定、疑問、簡答)。先按 <b>🔊 播放</b> 聽英文,再把打散的<b>單字磚拖曳</b>排成正確語序。語序全對才過關;7 句全對就通關!</p>`,
+  formal: `<p class="math"><b>否定句</b> = 主詞 + be 動詞 + <b>not</b> + …。可縮寫:is not → <b>isn't</b>、are not → <b>aren't</b>(am not 無縮寫)。<br>
+    例:He is not (isn't) my teacher.　They are not (aren't) here.<br>
+    <b>疑問句</b> = be 動詞移到句首,句尾加 <b>?</b>(疑問句的 be 不縮寫)。例:<b>Are</b> you a student?　<b>Is</b> she happy?<br>
+    <b>簡答句</b>:肯定 <b>Yes, 主詞 + be</b>(Yes, I am. — 不可縮成 Yes, I'm.);否定 <b>No, 主詞 + be + not</b>(No, he is not. / No, he isn't.)。</p>`,
+  goals: [
+    { id: "E7A_02-a", text: "把 7 個否定/疑問/簡答句的單字磚拖成正確語序(全部過關)" },
+  ],
+
+  state: { slots: [], bank: [], pass: [], sel: null },
+
+  _shuffle(arr, seed) {
+    const rng = mulberry32(seed);
+    const a = arr.slice();
+    for (let k = a.length - 1; k > 0; k--) {
+      const j = Math.floor(rng() * (k + 1));
+      [a[k], a[j]] = [a[j], a[k]];
+    }
+    if (a.length > 1 && a.every((w, idx) => w === arr[idx])) { [a[0], a[1]] = [a[1], a[0]]; }
+    return a;
+  },
+
+  _reset() {
+    this.state.slots = E7A2_SENTENCES.map(() => []);
+    this.state.bank  = E7A2_SENTENCES.map((s, i) =>
+      this._shuffle(s.words, 2000 + i).map((w, k) => ({ w, uid: `${i}_${k}` })));
+    this.state.pass  = E7A2_SENTENCES.map(() => false);
+    this.state.sel   = null;
+  },
+
+  enter() {
+    this._reset();
+    this._renderCtl && this._renderCtl();
+  },
+
+  /* demo:示範第 3 句(疑問句 Are you a student ?)怎麼把 be 動詞移到句首 */
+  demo() {
+    const lv = this, s = this.state;
+    const R = () => lv._renderCtl && lv._renderCtl();
+    const moveWord = (si, word) => {
+      const bi = s.bank[si].findIndex(t => t.w === word);
+      if (bi < 0) return;
+      const [tile] = s.bank[si].splice(bi, 1);
+      s.slots[si].push(tile);
+      lv._checkSentence(si);
+    };
+    const step = (word, cap) => ({ dur: 1500, cap, call: () => { moveWord(3, word); R(); } });
+    return [
+      { dur: 1200, cap: "疑問句要把 be 動詞移到句首。先聽這句:Are you a student?", call: () => { lv._reset(); R(); } },
+      step("Are", "be 動詞 Are 移到最前面當開頭。"),
+      step("you", "接主詞 you。"),
+      step("a", "單數可數名詞前加冠詞 a。"),
+      step("student", "student 放在 a 後面。"),
+      step("?", "疑問句句尾用問號 ? 結束。"),
+      { dur: 1400, cap: "換你排剩下的句子。否定句記得 be 動詞後加 not;簡答用 Yes, 主詞 + be 或 No, 主詞 + be + not。", call: () => R() },
+    ];
+  },
+
+  _checkSentence(si) {
+    const want = E7A2_SENTENCES[si].words;
+    const got  = this.state.slots[si].map(t => t.w);
+    this.state.pass[si] = got.length === want.length && got.every((w, k) => w === want[k]);
+    return this.state.pass[si];
+  },
+
+  _allPass() { return this.state.pass.every(Boolean); },
+
+  controls(el) {
+    const lv = this, s = this.state;
+
+    const playSentence = (si) => {
+      const a = new Audio(`audio/E7A_02_${si}.mp3`);
+      a.play().catch(() => {});
+    };
+
+    const toSlot = (si, uid) => {
+      const bi = s.bank[si].findIndex(t => t.uid === uid);
+      if (bi < 0) return;
+      const [tile] = s.bank[si].splice(bi, 1);
+      s.slots[si].push(tile);
+      lv._checkSentence(si); s.sel = null;
+    };
+    const toBank = (si, uid) => {
+      const idx = s.slots[si].findIndex(t => t.uid === uid);
+      if (idx < 0) return;
+      const [tile] = s.slots[si].splice(idx, 1);
+      s.bank[si].push(tile);
+      lv._checkSentence(si); s.sel = null;
+    };
+
+    const render = () => {
+      const rows = E7A2_SENTENCES.map((sent, si) => {
+        const passed = s.pass[si];
+        const slotTiles = s.slots[si].map(t =>
+          `<span class="et-tile et-inslot" draggable="true"
+                 data-si="${si}" data-uid="${t.uid}" data-from="slot">${t.w}</span>`).join("");
+        const bankTiles = s.bank[si].map(t =>
+          `<span class="et-tile${s.sel === t.uid ? " et-sel" : ""}" draggable="true"
+                 data-si="${si}" data-uid="${t.uid}" data-from="bank">${t.w}</span>`).join("");
+        const slotFull = s.slots[si].length > 0;
+        const status = passed
+          ? `<span class="et-ok">✓ 正確</span>`
+          : (slotFull ? `<span class="et-bad">語序再調整</span>` : "");
+        return `
+          <div class="et-row${passed ? " et-row-ok" : ""}" data-si="${si}">
+            <div class="et-head">
+              <button class="et-play" data-si="${si}" title="播放英文">🔊 播放</button>
+              <span class="et-zh">${sent.zh}</span>
+              ${status}
+            </div>
+            <div class="et-slot" data-si="${si}">
+              ${slotTiles || `<span class="et-slot-empty">把單字拖到這裡排成句子</span>`}
+            </div>
+            <div class="et-bank" data-si="${si}">${bankTiles || `<span class="et-slot-empty">（單字都用完了）</span>`}</div>
+          </div>`;
+      }).join("");
+
+      const done = s.pass.filter(Boolean).length;
+      el.innerHTML = `
+        <style>
+          .encell { font-size: 14px; }
+          .et-tip { font-size: 12px; color: #9aa5c4; margin-bottom: 8px; }
+          .et-row { border: 1.5px solid #39456e; border-radius: 10px; padding: 8px 10px; margin-bottom: 9px;
+            transition: border-color .12s, background .12s; }
+          .et-row-ok { border-color: #4ade80; background: rgba(74,222,128,.07); }
+          .et-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+          .et-play { background: #1d2440; color: #dfe4f5; border: 1.5px solid #55648f; border-radius: 7px;
+            padding: 5px 11px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; }
+          .et-play:hover { background: #2e3a63; border-color: #6ee7a0; }
+          .et-zh { color: #9aa5c4; font-size: 13px; }
+          .et-ok  { color: #4ade80; font-weight: 700; font-size: 13px; margin-left: auto; }
+          .et-bad { color: #ffb454; font-size: 12px; margin-left: auto; }
+          .et-slot { display: flex; flex-wrap: wrap; gap: 6px; min-height: 38px; padding: 6px;
+            border: 2px dashed #39456e; border-radius: 8px; background: #12162b; margin-bottom: 6px; align-items: center; }
+          .et-slot.et-over { border-color: #6ee7a0; background: rgba(110,231,160,.08); }
+          .et-slot-empty { color: #55648f; font-size: 12px; padding: 2px 4px; }
+          .et-bank { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+          .et-bank.et-over { outline: 2px dashed #6ee7a0; outline-offset: 3px; border-radius: 6px; }
+          .et-tile { padding: 6px 11px; border: 1.5px solid #55648f; border-radius: 8px;
+            background: #1d2440; color: #dfe4f5; cursor: grab; user-select: none; font-weight: 600; font-size: 14px; }
+          .et-tile:hover { background: #2e3a63; }
+          .et-tile.et-sel { border-color: #ffd166; box-shadow: 0 0 0 2px rgba(255,209,102,.35); }
+          .et-inslot { background: #223055; border-color: #6b7bb0; }
+          .et-actions { margin-top: 4px; display: flex; gap: 8px; align-items: center; }
+          .et-msg { margin-top: 8px; }
+        </style>
+        <div class="encell">
+          <div class="et-tip">先按 🔊 聽句子,再把下排單字磚<b>拖曳</b>(或先點磚、再點句子槽)排成正確語序。否定=be+not;疑問=be 移句首+?;簡答=Yes/No+主詞+be(+not)。7 句全對就通關。</div>
+          ${rows}
+          <div class="et-actions"><button id="et-reset">全部清除重做</button></div>
+          <div class="et-msg">${lv._allPass()
+              ? '<b style="color:#4ade80">🎉 全部 7 句語序正確!你掌握了 be 動詞的否定句(be+not)、疑問句(be 移句首+?)與簡答(Yes/No, 主詞+be)。</b>'
+              : `<b style="color:#9aa5c4">已完成 ${done}/7 句</b>`}</div>
+        </div>`;
+
+      el.querySelectorAll(".et-play").forEach(btn => {
+        btn.onclick = () => playSentence(+btn.dataset.si);
+      });
+
+      el.querySelectorAll(".et-bank .et-tile, .et-slot .et-tile").forEach(node => {
+        node.addEventListener("dragstart", e => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", JSON.stringify({ si: node.dataset.si, uid: node.dataset.uid, from: node.dataset.from }));
+        });
+        node.onclick = () => {
+          if (node.dataset.from === "slot") { toBank(+node.dataset.si, node.dataset.uid); render(); return; }
+          s.sel = (s.sel === node.dataset.uid) ? null : node.dataset.uid; render();
+        };
+      });
+
+      el.querySelectorAll(".et-slot").forEach(slotEl => {
+        const si = +slotEl.dataset.si;
+        slotEl.addEventListener("dragover", e => { e.preventDefault(); slotEl.classList.add("et-over"); });
+        slotEl.addEventListener("dragleave", () => slotEl.classList.remove("et-over"));
+        slotEl.addEventListener("drop", e => {
+          e.preventDefault(); slotEl.classList.remove("et-over");
+          let d; try { d = JSON.parse(e.dataTransfer.getData("text/plain")); } catch (_) { return; }
+          if (+d.si !== si) return;
+          if (d.from === "bank") { toSlot(si, d.uid); render(); }
+        });
+        slotEl.onclick = (e) => {
+          if (e.target.classList.contains("et-tile")) return;
+          if (s.sel != null) {
+            if (s.bank[si].some(t => t.uid === s.sel)) { toSlot(si, s.sel); render(); }
+          }
+        };
+      });
+
+      el.querySelectorAll(".et-bank").forEach(bankEl => {
+        const si = +bankEl.dataset.si;
+        bankEl.addEventListener("dragover", e => { e.preventDefault(); bankEl.classList.add("et-over"); });
+        bankEl.addEventListener("dragleave", () => bankEl.classList.remove("et-over"));
+        bankEl.addEventListener("drop", e => {
+          e.preventDefault(); bankEl.classList.remove("et-over");
+          let d; try { d = JSON.parse(e.dataTransfer.getData("text/plain")); } catch (_) { return; }
+          if (+d.si !== si) return;
+          if (d.from === "slot") { toBank(si, d.uid); render(); }
+        });
+      });
+
+      el.querySelector("#et-reset").onclick = () => { lv._reset(); render(); };
+
+      if (lv._allPass()) markGoal("E7A_02-a");
+    };
+
+    this._renderCtl = render;
+    render();
+  },
+
+  draw() {
+    const s = this.state;
+    const W = canvas.width;
+    g.fillStyle = TH.bg; g.fillRect(0, 0, W, canvas.height);
+
+    pText(CX, 110, "be 動詞的兩種變化", TH.text, 28, "center", true);
+
+    pText(CX, 175, "否定句", "#fbbf24", 22, "center", true);
+    pText(CX, 208, "主詞 + be + not", TH.text, 20, "center");
+    pText(CX, 236, "isn't / aren't（am not 無縮寫）", TH.dim, 15, "center");
+
+    pText(CX, 300, "疑問句", "#38bdf8", 22, "center", true);
+    pText(CX, 333, "be 移到句首 … ?", TH.text, 20, "center");
+    pText(CX, 361, "Yes, 主詞+be. / No, 主詞+be+not.", TH.dim, 15, "center");
+
+    const done = s.pass ? s.pass.filter(Boolean).length : 0;
+    pText(CX, 420, `造句進度 ${done}/7`, done === 7 ? "#4ade80" : TH.dim, 20, "center", true);
+    if (done === 7) pText(CX, 456, "🎉 全部語序正確!", "#4ade80", 22, "center", true);
+
+    readout.innerHTML = done === 7
+      ? `<b style="color:#4ade80">7 句全對,通關!</b>`
+      : `已排好 <b>${done}/7</b> 句 — 聽 🔊 再拖曳單字排出正確語序(否定/疑問/簡答)`;
+  },
+};
+
+/* ================================================================
    makeStaticEnDrill — 英文段考題庫關卡工廠(獨立錯題本,與自然/數學分開)
    題目格式:{ tid, q, opts:["A. …",…], ans:"A", why }
    ================================================================ */
@@ -532,16 +793,55 @@ const E7A_01_DRILL = makeStaticEnDrill(
 );
 
 /* ================================================================
+   E7A_02_DRILL — be 動詞否定句與疑問句段考題庫(10 題)
+   考點:否定句 be+not、疑問句語序(be 移句首+?)、簡答 Yes/No、縮寫 isn't/aren't。
+   答案經人工核對,文法正確無爭議。
+   ================================================================ */
+const E7A_02_QUESTIONS = [
+  { tid: "e7a_02_q1", q: "___ you a teacher?", opts: ["A. Am", "B. Is", "C. Are", "D. Do"], ans: "C",
+    why: "疑問句把 be 動詞移到句首;主詞 you 用 are,故用 Are。" },
+  { tid: "e7a_02_q2", q: "She is ___ happy.（她不快樂)", opts: ["A. not", "B. no", "C. don't", "D. isn't"], ans: "A",
+    why: "否定句是 be 動詞後面加 not:She is not happy。B. no 是「沒有」不接形容詞;isn't 已含 is 不能再放在 is 後面。" },
+  { tid: "e7a_02_q3", q: "___ she a nurse?", opts: ["A. Am", "B. Is", "C. Are", "D. Be"], ans: "B",
+    why: "she 的 be 動詞是 is,疑問句把 is 移到句首:Is she a nurse?" },
+  { tid: "e7a_02_q4", q: "They ___ not students.", opts: ["A. am", "B. is", "C. are", "D. be"], ans: "C",
+    why: "they 是複數,be 動詞用 are;否定就是 are not(aren't)。" },
+  { tid: "e7a_02_q5", q: "「are not」的縮寫是哪一個?", opts: ["A. amn't", "B. isn't", "C. aren't", "D. arent"], ans: "C",
+    why: "are not → aren't(is not → isn't;am not 沒有縮寫)。D 少了縮寫的撇號。" },
+  { tid: "e7a_02_q6", q: "Are you a student? — ___, I am.（肯定簡答)", opts: ["A. Yes", "B. No", "C. Not", "D. Am"], ans: "A",
+    why: "肯定簡答用 Yes, 主詞 + be:Yes, I am。" },
+  { tid: "e7a_02_q7", q: "Is he your teacher? — No, he ___.（否定簡答)", opts: ["A. is", "B. is not", "C. are not", "D. am not"], ans: "B",
+    why: "否定簡答是 No, 主詞 + be + not:No, he is not.(也可縮成 isn't)。主詞 he 用 is。" },
+  { tid: "e7a_02_q8", q: "下列哪一句「完全正確」?", opts: ["A. Are you a student?", "B. You are student?", "C. Is you happy?", "D. He not is here."], ans: "A",
+    why: "疑問句 be 移句首且加 a:Are you a student? 正確。B 沒把 be 移到句首;C 主詞 you 應用 Are;D 語序錯,應為 He is not here。" },
+  { tid: "e7a_02_q9", q: "Yes 的簡答不可以縮寫。下列哪一個「錯」?", opts: ["A. Yes, I am.", "B. Yes, I'm.", "C. No, he isn't.", "D. No, they aren't."], ans: "B",
+    why: "肯定簡答句尾不縮寫,Yes, I'm. 是錯的,要用 Yes, I am。否定簡答則可縮(isn't/aren't)。" },
+  { tid: "e7a_02_q10", q: "I ___ late.（我沒有遲到)", opts: ["A. am not", "B. not am", "C. amn't", "D. is not"], ans: "A",
+    why: "主詞 I 用 am,否定是 am not(am not 沒有縮寫,也不能寫 amn't);語序是 be+not。" },
+];
+
+const E7A_02_DRILL = makeStaticEnDrill(
+  "E7A_02D",
+  "否定/疑問段考練習",
+  "段考練習|E7A-2D:否定句與疑問句題庫",
+  `<p>本關模擬國中七上英文段考選擇題——<b>10 題</b>,考 be 動詞的<b>否定句</b>(be+not)、<b>疑問句</b>(be 移句首+?)、<b>簡答</b>與縮寫(isn't/aren't)。</p><p>點選正確選項,答完後可看詳解與成績;答對率 ≥75% 解鎖通關。</p>`,
+  "完成段考練習且答對率 ≥75%(否定句與疑問句)",
+  E7A_02_QUESTIONS
+);
+
+/* ================================================================
    ENGLISH7A_REGISTRY — 供 main.js subject-loader / 深連結使用
    ================================================================ */
 const ENGLISH7A_REGISTRY = {
   E7A_01,
   E7A_01D: E7A_01_DRILL,
+  E7A_02,
+  E7A_02D: E7A_02_DRILL,
 };
 
 /* 科目定義:subject-loader 會讀這個全域 */
 window.__SUBJECT_ENGLISH7A__ = {
   subjectKey: "e7a",
   subjectName: "七上英文",
-  levels: [E7A_01, E7A_01_DRILL],
+  levels: [E7A_01, E7A_01_DRILL, E7A_02, E7A_02_DRILL],
 };

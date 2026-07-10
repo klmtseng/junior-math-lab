@@ -5,5 +5,13 @@
  { "id": "E7A_01", "i": 3, "cap": "She is happy." },
  { "id": "E7A_01", "i": 4, "cap": "It is a dog." },
  { "id": "E7A_01", "i": 5, "cap": "We are classmates." },
- { "id": "E7A_01", "i": 6, "cap": "They are students." }
+ { "id": "E7A_01", "i": 6, "cap": "They are students." },
+
+ { "id": "E7A_02", "i": 0, "cap": "I am not late." },
+ { "id": "E7A_02", "i": 1, "cap": "He is not my teacher." },
+ { "id": "E7A_02", "i": 2, "cap": "They are not here." },
+ { "id": "E7A_02", "i": 3, "cap": "Are you a student?" },
+ { "id": "E7A_02", "i": 4, "cap": "Is she happy?" },
+ { "id": "E7A_02", "i": 5, "cap": "Yes, I am." },
+ { "id": "E7A_02", "i": 6, "cap": "No, he is not." }
 ]
