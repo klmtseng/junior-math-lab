@@ -634,6 +634,166 @@ function checkAnswer(tpl, gen_result, userRaw) {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   選擇題選項生成（干擾項）
+   makeOptions(tpl, gen_result, rng) → { options:[str], correctIdx }
+   安全底線：任何干擾項都必須被 checkAnswer 判為「錯」，
+   否則丟棄（絕不出現第二個正解，含等值分數等情形）。
+   ═══════════════════════════════════════════════════════════ */
+function _isCorrectDistractor(tpl, gen_result, candidate) {
+  // 干擾項只要被 checkAnswer 接受（=也是正解）就不安全
+  return checkAnswer(tpl, gen_result, candidate);
+}
+
+// 依答案格式產生候選干擾項（可能含重複/不合法，之後統一過濾）
+function _distractorCandidates(gen_result) {
+  const ans = String(gen_result.ans).trim();
+  const out = [];
+
+  // (a) 純整數答案：正負號錯、鄰近值、進位/差一位
+  if (/^-?\d+$/.test(ans)) {
+    const n = parseInt(ans, 10);
+    const cands = [n + 1, n - 1, -n, n + 2, n - 2, n + 10, n - 10, n * 2];
+    cands.forEach(v => out.push(String(v)));
+    return out;
+  }
+
+  // (b) 小數答案（如平均、中點）：鄰近值、正負號錯
+  if (/^-?\d+\.\d+$/.test(ans)) {
+    const n = parseFloat(ans);
+    const cands = [n + 1, n - 1, -n, n + 0.5, n - 0.5, n + 2, Math.round(n)];
+    cands.forEach(v => out.push(String(v)));
+    return out;
+  }
+
+  // (c) 分數答案 p/q：分子±1、分母±1、上下顛倒
+  const mFrac = ans.match(/^(-?\d+)\/(-?\d+)$/);
+  if (mFrac) {
+    const p = parseInt(mFrac[1], 10), q = parseInt(mFrac[2], 10);
+    [[p + 1, q], [p - 1, q], [p, q + 1], [p, q - 1], [q, p], [p + 1, q + 1]]
+      .forEach(([nn, dd]) => { if (dd !== 0) out.push(fracStr(nn, dd)); });
+    return out;
+  }
+
+  // (d) 座標 (x,y)：各分量取相反數、±1
+  const mPt = ans.match(/^\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?$/);
+  if (mPt) {
+    const x = parseInt(mPt[1], 10), y = parseInt(mPt[2], 10);
+    [[-x, y], [x, -y], [-x, -y], [y, x], [x + 1, y], [x, y + 1]]
+      .forEach(([a, b]) => out.push(`(${a},${b})`));
+    return out;
+  }
+
+  // (e) 聯立解 x=?,y=?：各分量取相反數、±1、對調
+  const mSim = ans.match(/^x=(-?\d+),y=(-?\d+)$/);
+  if (mSim) {
+    const x = parseInt(mSim[1], 10), y = parseInt(mSim[2], 10);
+    [[-x, y], [x, -y], [-x, -y], [y, x], [x + 1, y], [x, y + 1]]
+      .forEach(([a, b]) => out.push(`x=${a},y=${b}`));
+    return out;
+  }
+
+  // (f) 不等式 x<3 / x>=-2：翻轉不等號、邊界±1（常見錯誤）
+  const mIneq = ans.match(/^x(<=|>=|<|>|≤|≥)(-?\d+)$/);
+  if (mIneq) {
+    const opNorm = mIneq[1].replace("<=", "≤").replace(">=", "≥");
+    const k = parseInt(mIneq[2], 10);
+    const flip = { "<": ">", ">": "<", "≤": "≥", "≥": "≤" };
+    const strictSwap = { "<": "≤", ">": "≥", "≤": "<", "≥": ">" };
+    out.push(`x${flip[opNorm]}${k}`);
+    out.push(`x${strictSwap[opNorm]}${k}`);
+    out.push(`x${opNorm}${k + 1}`);
+    out.push(`x${opNorm}${k - 1}`);
+    out.push(`x${flip[opNorm]}${k + 1}`);
+    return out;
+  }
+
+  // (g) 象限：其餘三個象限
+  if (/第[一二三四]象限/.test(ans)) {
+    ["第一象限", "第二象限", "第三象限", "第四象限"].forEach(o => out.push(o));
+    return out;
+  }
+
+  // (h) 絕對值比較：|a| / |b| / 一樣大 三選項
+  const mAbs = ans.match(/^\|(-?\d+)\|$/);
+  if (mAbs || ans === "一樣大") {
+    // 直接把另一個 |x| 與「一樣大」列為候選；真正的另一項在 q 文字裡，
+    // 這裡先給「一樣大」與符號變體，過濾階段會保留合法者。
+    if (ans !== "一樣大") out.push("一樣大");
+    if (mAbs) {
+      const v = parseInt(mAbs[1], 10);
+      out.push(`|${-v}|`, `|${v + 1}|`, `|${v - 1}|`);
+    }
+    return out;
+  }
+
+  // (i) 質因數分解 2²×3×5：把某個指數改掉（乘積會變，必被判錯）
+  if (/[×x*]/.test(ans) && /\d/.test(ans)) {
+    // 拆出各因數，微調其中一個為相鄰質數或改指數
+    const parts = ans.split(/[×x*]/);
+    const swaps = [
+      ans.replace(/²/, "³"),
+      ans.replace(/³/, "²"),
+      ans.replace(/(^|[×x*])2([²³⁴]?)/, (m, p) => `${p}3${m.match(/[²³⁴]/) || ""}`),
+      parts.length > 1 ? parts.slice(0, -1).join("×") : ans + "×2",
+      ans + "×2",
+    ];
+    swaps.forEach(sw => { if (sw && sw !== ans) out.push(sw); });
+    return out;
+  }
+
+  return out; // 未知格式 → 空，後續 fallback 處理
+}
+
+function makeOptions(tpl, gen_result, rng) {
+  const rand = rng || Math.random;
+  const correct = String(gen_result.ans).trim();
+  const normCorrect = normAns(correct);
+
+  // 收集合法干擾項：格式候選 → 過濾（不得為正解、不得與已選重複）
+  const chosen = [];
+  const seenNorm = new Set([normCorrect]);
+  const pushIfSafe = (cand) => {
+    const c = String(cand).trim();
+    if (!c) return;
+    const nc = normAns(c);
+    if (seenNorm.has(nc)) return;                       // 去重（含與正解同值）
+    if (_isCorrectDistractor(tpl, gen_result, c)) return; // 安全底線：不得也是正解
+    seenNorm.add(nc);
+    chosen.push(c);
+  };
+
+  const cands = _distractorCandidates(gen_result);
+  for (const c of cands) { if (chosen.length >= 3) break; pushIfSafe(c); }
+
+  // fallback：候選不足 3 個時，用整數擾動補齊（適用大多數數值型；
+  // 非數值型若補不滿就用少一點的選項，仍保證每項唯一且非正解）
+  if (chosen.length < 3) {
+    const numMatch = correct.match(/-?\d+(\.\d+)?/);
+    if (numMatch) {
+      const base = parseFloat(numMatch[0]);
+      let delta = 1;
+      let guard = 0;
+      while (chosen.length < 3 && guard++ < 40) {
+        const sign = (guard % 2 === 0) ? 1 : -1;
+        const v = base + sign * delta;
+        const cand = correct.replace(/-?\d+(\.\d+)?/, Number.isInteger(base) ? String(v) : v.toFixed(1));
+        pushIfSafe(cand);
+        delta++;
+      }
+    }
+  }
+
+  // 組合正解 + 干擾項，洗牌
+  const options = [correct, ...chosen.slice(0, 3)];
+  for (let k = options.length - 1; k > 0; k--) {
+    const j = Math.floor(rand() * (k + 1));
+    [options[k], options[j]] = [options[j], options[k]];
+  }
+  const correctIdx = options.findIndex(o => normAns(o) === normCorrect);
+  return { options, correctIdx };
+}
+
+/* ═══════════════════════════════════════════════════════════
    makeExamLevel — 產生一個關卡（MX1/MX2/MX3）
    ═══════════════════════════════════════════════════════════ */
 function makeExamLevel(id, shortName, bookFilter, goalText) {
@@ -676,7 +836,9 @@ function makeExamLevel(id, shortName, bookFilter, goalText) {
         const tpl = templates[Math.floor(rng() * templates.length)];
         const rng2 = mulberry32(Math.floor(rng() * 2147483647));
         const gen_result = tpl.gen(rng2);
-        qs.push({ tpl, gen_result, userAns: "", correct: null });
+        const optRng = mulberry32(Math.floor(rng() * 2147483647) ^ (i + 1));
+        const { options, correctIdx } = makeOptions(tpl, gen_result, optRng);
+        qs.push({ tpl, gen_result, options, correctIdx, userAns: "", correct: null });
       }
       return qs;
     },
@@ -760,37 +922,37 @@ function makeExamLevel(id, shortName, bookFilter, goalText) {
         if (s.phase === "quiz") {
           const qItem = s.questions[s.qi];
           const isAnswered = qItem.correct !== null;
+          const opts = qItem.options;
+          const cIdx = qItem.correctIdx;
+          const optBtns = opts.map((o, k) => {
+            let cls = "quiz-opt";
+            if (isAnswered) {
+              if (k === cIdx) cls += " right";
+              else if (k === qItem.chosenIdx) cls += " wrong";
+            }
+            return `<button class="${cls}" data-k="${k}" ${isAnswered ? "disabled" : ""}>${o}</button>`;
+          }).join("");
           el.innerHTML = `
             <div class="quiz-q"><b>第 ${s.qi + 1}/${s.count} 題</b>　${qItem.gen_result.q}</div>
-            <div class="row" style="margin-top:8px">
-              <input id="drill-ans-input" type="text" inputmode="text" autocomplete="off"
-                style="flex:1;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:.95rem;font-family:inherit"
-                placeholder="在此輸入答案"
-                value="${isAnswered ? (normAns(qItem.userAns)) : ""}"
-                ${isAnswered ? "disabled" : ""}>
-              ${!isAnswered ? `<button class="primary" id="drill-submit">送出</button>` : ""}
-            </div>
+            <div style="margin-top:8px">${optBtns}</div>
             <div id="drill-msg" class="quiz-msg" style="margin-top:6px">
               ${isAnswered ? (qItem.correct ? `<span style="color:#4ade80">✓ 正確！</span>` : `<span style="color:#ff5c7a">✗ 答案：${qItem.gen_result.ans}</span>`) + `　${qItem.gen_result.why}` : ""}
             </div>
             ${isAnswered ? `<div class="row"><button class="primary" id="drill-next">${s.qi + 1 < s.count ? "下一題" : "看成績"}</button></div>` : ""}
           `;
           if (!isAnswered) {
-            const inp = el.querySelector("#drill-ans-input");
-            const sub = el.querySelector("#drill-submit");
-            const doSubmit = () => {
-              const val = inp.value.trim();
-              if (!val) return;
-              qItem.userAns = val;
-              const tpl = qItem.tpl;
-              qItem.correct = checkAnswer(tpl, qItem.gen_result, val);
-              if (qItem.correct) dbHit(tpl.tid);
-              else dbMiss(tpl.tid);
-              render();
-            };
-            sub.onclick = doSubmit;
-            inp.addEventListener("keydown", e => { if (e.key === "Enter") doSubmit(); });
-            inp.focus();
+            el.querySelectorAll(".quiz-opt[data-k]").forEach(btn => {
+              btn.onclick = () => {
+                if (qItem.correct !== null) return;
+                const k = parseInt(btn.dataset.k, 10);
+                qItem.chosenIdx = k;
+                qItem.userAns = opts[k];
+                qItem.correct = (k === cIdx);
+                if (qItem.correct) dbHit(qItem.tpl.tid);
+                else dbMiss(qItem.tpl.tid);
+                render();
+              };
+            });
           } else {
             el.querySelector("#drill-next").onclick = () => {
               s.qi++;
@@ -820,6 +982,9 @@ function makeExamLevel(id, shortName, bookFilter, goalText) {
       if (!tpl) { s.reviewIdx++; this._genReviewItem(); return; }
       s.reviewTpl = tpl;
       s.reviewGen = tpl.gen(mulberry32(Date.now() + s.reviewIdx * 9999));
+      const rvOpt = makeOptions(tpl, s.reviewGen, mulberry32(Date.now() ^ (s.reviewIdx * 7919 + 1)));
+      s.reviewOptions = rvOpt.options;
+      s.reviewCorrectIdx = rvOpt.correctIdx;
       s.reviewAns = "";
       s.reviewAnswered = false;
     },
@@ -840,16 +1005,19 @@ function makeExamLevel(id, shortName, bookFilter, goalText) {
       const tid = tpl.tid;
       const total = s.reviewQueue.length;
       const answered = s.reviewAnswered;
+      const rvOpts = s.reviewOptions || [];
+      const rvCIdx = s.reviewCorrectIdx;
+      const rvOptBtns = rvOpts.map((o, k) => {
+        let cls = "quiz-opt";
+        if (answered) {
+          if (k === rvCIdx) cls += " right";
+          else if (k === s.reviewChosenIdx) cls += " wrong";
+        }
+        return `<button class="${cls}" data-k="${k}" ${answered ? "disabled" : ""}>${o}</button>`;
+      }).join("");
       el.innerHTML = `
         <div class="quiz-q"><span style="color:#fbbf24">📕 弱點複習</span>　${s.reviewIdx+1}/${total}　${gen.q}</div>
-        <div class="row" style="margin-top:8px">
-          <input id="rv-input" type="text" inputmode="text" autocomplete="off"
-            style="flex:1;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:.95rem;font-family:inherit"
-            placeholder="在此輸入答案"
-            value="${answered ? normAns(s.reviewAns) : ""}"
-            ${answered ? "disabled" : ""}>
-          ${!answered ? `<button class="primary" id="rv-submit">送出</button>` : ""}
-        </div>
+        <div style="margin-top:8px">${rvOptBtns}</div>
         <div id="rv-msg" class="quiz-msg" style="margin-top:6px">
           ${answered ? (s.reviewCorrect
             ? `<span style="color:#4ade80">✓ 答對了，已從弱點清單移除！</span>`
@@ -858,21 +1026,19 @@ function makeExamLevel(id, shortName, bookFilter, goalText) {
         ${answered ? `<div class="row"><button class="primary" id="rv-next">${s.reviewIdx+1 < total ? "下一個弱點" : "看結果"}</button></div>` : ""}
       `;
       if (!answered) {
-        const inp = el.querySelector("#rv-input");
-        const sub = el.querySelector("#rv-submit");
-        const doSubmit = () => {
-          const val = inp.value.trim();
-          if (!val) return;
-          s.reviewAns = val;
-          s.reviewCorrect = checkAnswer(tpl, gen, val);
-          s.reviewAnswered = true;
-          if (s.reviewCorrect) dbHit(tid);
-          // 不計分不觸發過關
-          render();
-        };
-        sub.onclick = doSubmit;
-        inp.addEventListener("keydown", e => { if (e.key === "Enter") doSubmit(); });
-        inp.focus();
+        el.querySelectorAll(".quiz-opt[data-k]").forEach(btn => {
+          btn.onclick = () => {
+            if (s.reviewAnswered) return;
+            const k = parseInt(btn.dataset.k, 10);
+            s.reviewChosenIdx = k;
+            s.reviewAns = rvOpts[k];
+            s.reviewCorrect = (k === rvCIdx);
+            s.reviewAnswered = true;
+            if (s.reviewCorrect) dbHit(tid);
+            // 不計分不觸發過關
+            render();
+          };
+        });
       } else {
         el.querySelector("#rv-next").onclick = () => {
           s.reviewIdx++;

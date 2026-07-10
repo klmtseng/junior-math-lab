@@ -64,32 +64,48 @@ def get_correct_ans(pg):
 def get_phase(pg):
     return pg.evaluate("() => { try { return levels[curIdx].state.phase; } catch(e) { return 'unknown'; } }")
 
-def submit_answer(pg, ans):
-    # 等待輸入框可用（未禁用）
-    inp = pg.wait_for_selector("#drill-ans-input:not([disabled])", timeout=4000)
-    if not inp:
+def get_correct_idx(pg):
+    return pg.evaluate("""() => {
+        try {
+            const lv = levels[curIdx];
+            const q = lv.state.questions[lv.state.qi];
+            return q ? q.correctIdx : -1;
+        } catch(e) { return -1; }
+    }""")
+
+def submit_answer(pg, want_correct):
+    """選擇題作答：want_correct=True 點正解按鈕，False 點任一干擾項。
+    直接透過 JS 觸發按鈕點擊並斷言判定結果，避免 element handle 過期競態。"""
+    pg.wait_for_selector(".quiz-opt[data-k]:not([disabled])", timeout=4000)
+    cidx = get_correct_idx(pg)
+    # 目標索引：答對→cidx；答錯→任一非 cidx
+    target = cidx if want_correct else (0 if cidx != 0 else 1)
+    clicked = pg.evaluate(
+        """(t) => {
+            const btns = document.querySelectorAll('.quiz-opt[data-k]');
+            if (!btns[t]) return false;
+            btns[t].click();
+            return true;
+        }""", target)
+    if not clicked:
         return False
-    inp.fill(ans)
-    sub = pg.query_selector("#drill-submit")
-    if sub:
-        sub.click()
-    else:
-        inp.press("Enter")
-    # 等待輸入框變成 disabled（表示判斷已完成、re-render 跑過）
-    pg.wait_for_selector("#drill-ans-input[disabled]", timeout=3000)
-    # 等待「下一題」或「看成績」按鈕出現
+    # 斷言判定與預期相符（答對→correct===true，答錯→false）
+    pg.wait_for_function(
+        """(w) => { try {
+            const q = levels[curIdx].state.questions[levels[curIdx].state.qi];
+            return q.correct === (w ? true : false);
+        } catch(e) { return false; } }""",
+        arg=want_correct, timeout=3000)
     pg.wait_for_selector("#drill-next", timeout=3000)
-    nxt = pg.query_selector("#drill-next")
-    if nxt:
-        nxt.click()
-        # 等待下一題 input（未禁用）或進入 result phase
-        try:
-            pg.wait_for_function(
-                "() => { try { if (levels[curIdx].state.phase === 'result') return true; } catch(e) {} return !!document.querySelector('#drill-ans-input:not([disabled])'); }",
-                timeout=4000
-            )
-        except Exception:
-            pass
+    qi_before = pg.evaluate("() => { try { return levels[curIdx].state.qi; } catch(e) { return -1; } }")
+    pg.evaluate("() => { const b = document.querySelector('#drill-next'); if (b) b.click(); }")
+    try:
+        pg.wait_for_function(
+            "(qb) => { try { const s = levels[curIdx].state; if (s.phase === 'result') return true; return s.qi > qb && !!document.querySelector('.quiz-opt[data-k]:not([disabled])'); } catch(e) { return false; } }",
+            arg=qi_before, timeout=4000
+        )
+    except Exception:
+        pass
     return True
 
 def start_quiz_10(pg):
@@ -97,8 +113,8 @@ def start_quiz_10(pg):
     for btn in pg.query_selector_all(".quiz-opt[data-n]"):
         if "10" in btn.text_content():
             btn.click()
-            # 等待第一道題的輸入框
-            pg.wait_for_selector("#drill-ans-input:not([disabled])", timeout=4000)
+            # 等待第一道題的選項按鈕
+            pg.wait_for_selector(".quiz-opt[data-k]:not([disabled])", timeout=4000)
             return True
     return False
 
@@ -119,12 +135,12 @@ try:
         # ── Round 1: 前 3 題答錯，後 7 題答對 ──
         assert start_quiz_10(pg), "找不到「10 題」按鈕"
 
+        # 前 7 題答對、後 3 題答錯：確保「答錯」的 tid 之後不會再被答對而清除，
+        # 錯題本在卷末必定 ≥1（供 T2/T4 弱點複習流程使用）
+        db_after_wrong = {}
         for i in range(10):
-            correct = get_correct_ans(pg)
-            if i < 3:
-                submit_answer(pg, "WRONG_ANSWER_XYZ")
-            else:
-                submit_answer(pg, correct if correct else "0")
+            submit_answer(pg, want_correct=(i < 7))
+        db_after_wrong = json.loads(pg.evaluate("() => localStorage.getItem('jrlab-drillbook-v1')") or "{}")
 
         # 等待進入 result phase
         wait_for_phase(pg, "result", timeout=4000)
@@ -137,11 +153,10 @@ try:
         all_pass = all_pass and t1
         print(f"T1 卷末成績單出現: {'PASS' if t1 else 'FAIL'} (text={result_text[:60]!r})")
 
-        # T2 drillBook 記錄
-        db = json.loads(pg.evaluate("() => localStorage.getItem('jrlab-drillbook-v1')") or "{}")
-        t2 = len(db) >= 1
+        # T2 drillBook 記錄（用「三題答錯後」的快照，避免後續答對同 tid 誤清）
+        t2 = len(db_after_wrong) >= 1
         all_pass = all_pass and t2
-        print(f"T2 drillBook 記錄 ≥1 tid: {'PASS' if t2 else 'FAIL'} (keys={list(db.keys())})")
+        print(f"T2 drillBook 記錄 ≥1 tid: {'PASS' if t2 else 'FAIL'} (keys={list(db_after_wrong.keys())})")
 
         # T3 不觸發 goal
         prog = json.loads(pg.evaluate("() => localStorage.getItem('jrlab-progress-v1')") or "{}")
@@ -165,14 +180,11 @@ try:
         t4b = False
         if rv_btn:
             rv_btn.click()
-            # 等待複習輸入框
-            pg.wait_for_selector("#rv-input:not([disabled])", timeout=3000)
+            # 等待複習選項按鈕
+            pg.wait_for_selector(".quiz-opt[data-k]:not([disabled])", timeout=3000)
 
-            rv_correct = pg.evaluate("""() => {
-                try {
-                    const lv = levels[curIdx];
-                    return lv && lv.state && lv.state.reviewGen ? lv.state.reviewGen.ans : null;
-                } catch(e) { return null; }
+            rv_cidx = pg.evaluate("""() => {
+                try { return levels[curIdx].state.reviewCorrectIdx; } catch(e) { return -1; }
             }""")
             rv_tid = pg.evaluate("""() => {
                 try {
@@ -181,13 +193,10 @@ try:
                 } catch(e) { return null; }
             }""")
 
-            if rv_correct:
-                inp = pg.query_selector("#rv-input")
-                if inp and not inp.is_disabled():
-                    inp.fill(rv_correct)
-                    sub2 = pg.query_selector("#rv-submit")
-                    if sub2: sub2.click()
-                    else: inp.press("Enter")
+            if rv_cidx is not None and rv_cidx >= 0:
+                rv_btns = pg.query_selector_all(".quiz-opt[data-k]")
+                if rv_btns and rv_cidx < len(rv_btns):
+                    rv_btns[rv_cidx].click()
                     # 等待下一步按鈕
                     pg.wait_for_selector("#rv-next", timeout=3000)
 
@@ -204,13 +213,14 @@ try:
                     rv_back.click()
                     pg.wait_for_selector(".quiz-opt[data-n]", timeout=3000)
                     break
-                # 有 input 就答錯
-                rv_inp = pg.query_selector("#rv-input:not([disabled])")
-                if rv_inp:
-                    rv_inp.fill("SKIP")
-                    rv_sub = pg.query_selector("#rv-submit")
-                    if rv_sub: rv_sub.click()
-                    else: rv_inp.press("Enter")
+                # 有未作答的選項就選一個干擾項（答錯，跳過）
+                rv_opt = pg.query_selector(".quiz-opt[data-k]:not([disabled])")
+                if rv_opt:
+                    rv_cidx2 = pg.evaluate("() => { try { return levels[curIdx].state.reviewCorrectIdx; } catch(e) { return 0; } }")
+                    rv_btns2 = pg.query_selector_all(".quiz-opt[data-k]")
+                    wrong_i = 0 if rv_cidx2 != 0 else 1
+                    if rv_btns2 and wrong_i < len(rv_btns2):
+                        rv_btns2[wrong_i].click()
                     # 等待下一步
                     try:
                         pg.wait_for_function(
@@ -249,8 +259,7 @@ try:
             all_pass = False
         else:
             for i in range(10):
-                correct2 = get_correct_ans(pg)
-                submit_answer(pg, correct2 if correct2 else "0")
+                submit_answer(pg, want_correct=True)
 
             wait_for_phase(pg, "result", timeout=4000)
             prog2 = json.loads(pg.evaluate("() => localStorage.getItem('jrlab-progress-v1')") or "{}")
