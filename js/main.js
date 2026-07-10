@@ -1466,6 +1466,21 @@ document.addEventListener("pointerdown", () => {
     }
   }
   renderSubjects();
-  switchLevel(0);
+  // 深連結:?level=<關卡id> → 直接切到該關(綜合練習入口用,例 ?level=B1Q / ?subject=science7a&level=S7A_QZ)
+  const urlLevel = new URLSearchParams(location.search).get("level");
+  let startIdx = 0, startSubj = null;
+  if (urlLevel) {
+    for (const [key, sub] of Object.entries(SUBJECTS)) {
+      const idx = sub.levels.findIndex(lv => lv.id === urlLevel);
+      if (idx >= 0) { startSubj = key; startIdx = idx; break; }
+    }
+    if (!startSubj) console.warn(`[deep-link] 未知 level=${urlLevel},從第一關開始`);
+  }
+  if (startSubj && startSubj !== curSubject) {
+    curSubject = startSubj;
+    levels = SUBJECTS[startSubj].levels;
+    renderSubjects();
+  }
+  switchLevel(startIdx);
   frame();
 })();

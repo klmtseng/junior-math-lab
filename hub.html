@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>綜合練習入口 — 國中數感實驗室</title>
+<meta name="description" content="統一綜合練習入口:先選科目(數學/自然),再作答對應的總測驗。">
+<link rel="stylesheet" href="style.css">
+<style>
+  #hub-main { max-width: 760px; margin: 0 auto; padding: 28px 20px 48px; width: 100%; }
+  .hub-lead { color: var(--dim); margin-bottom: 22px; }
+  .subj-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 22px; margin-bottom: 20px;
+  }
+  .subj-card h2 { font-size: 1.25rem; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  .subj-card .desc { color: var(--dim); font-size: .92rem; margin-bottom: 14px; }
+  .quiz-links { display: flex; flex-wrap: wrap; gap: 12px; }
+  a.quiz-link {
+    display: flex; flex-direction: column; text-decoration: none;
+    background: var(--panel2); border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 14px 18px; color: var(--ink); min-width: 190px; flex: 1;
+    transition: border-color .15s, transform .1s;
+  }
+  a.quiz-link:hover { border-color: var(--accent); transform: translateY(-2px); }
+  a.quiz-link .big { font-size: 1.05rem; font-weight: bold; }
+  a.quiz-link .small { font-size: .82rem; color: var(--dim); margin-top: 3px; }
+  a.back-link { color: var(--dim); text-decoration: none; font-size: .9rem; }
+  a.back-link:hover { color: var(--accent); }
+  .math-icon { color: var(--accent); }
+  .sci-icon { color: var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>綜合練習入口 <span class="en">Practice Hub</span></h1>
+  <p class="subtitle">先選科目,再作答該科的<b>總測驗</b>。每題答完都有解析,可整卷重來。</p>
+</header>
+
+<main id="hub-main">
+  <p class="hub-lead">這裡把各科的綜合總測驗集中在一個入口。挑一科開始 👇</p>
+
+  <div class="subj-card">
+    <h2><span class="math-icon">📐</span> 數學綜合練習</h2>
+    <div class="desc">串起各關最重要的觀念,單選題形式,答對達標即通過該冊。</div>
+    <div class="quiz-links">
+      <a class="quiz-link" href="index.html?level=B1Q">
+        <span class="big">七上總測驗</span>
+        <span class="small">負數・解方程・質因數・分數・統計 等</span>
+      </a>
+      <a class="quiz-link" href="index.html?level=JQ">
+        <span class="big">七下 / 銜接總測驗</span>
+        <span class="small">座標・比例・聯立・不等式 等</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="subj-card">
+    <h2><span class="sci-icon">🔬</span> 自然綜合練習</h2>
+    <div class="desc">七上自然總測驗:細胞・構造層次・尺度單位・生物圈組成 綜合抽題。</div>
+    <div class="quiz-links">
+      <a class="quiz-link" href="index.html?subject=science7a&level=S7A_QZ">
+        <span class="big">七上自然總測驗</span>
+        <span class="small">跨單元綜合抽題,選擇題</span>
+      </a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <p><a class="back-link" href="index.html">← 回互動關卡首頁</a></p>
+  <p>綜合練習集中於一個入口:選科目 → 作答該科總測驗。進度與錯題本存在本機瀏覽器。</p>
+</footer>
+</body>
+</html>

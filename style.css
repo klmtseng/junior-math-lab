@@ -44,6 +44,12 @@ header { padding: 20px 24px 12px; border-bottom: 1px solid var(--line); position
 #voice-btn { right: 68px; }
 #voice-btn.on { border-color: var(--accent); background: var(--accent); }
 #theme-btn:hover, #voice-btn:hover { border-color: var(--accent); }
+#hub-link {
+  position: absolute; top: 18px; right: 114px; height: 38px; display: flex; align-items: center;
+  padding: 0 14px; background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 10px; color: var(--ink); text-decoration: none; font-size: .9rem; font-weight: bold;
+}
+#hub-link:hover { border-color: var(--accent); color: var(--accent); }
 #overall { color: var(--accent); margin-left: 12px; font-variant-numeric: tabular-nums; }
 #cert {
   display: none;
