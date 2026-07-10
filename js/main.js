@@ -1287,6 +1287,7 @@ let curSubject = "b1";
    無參數: 完全不動,行為與改前一致。                             */
 const _SUBJECT_LOADERS = {
   science7a: "js/subjects/science7a.js",
+  english7a: "js/subjects/english7a.js",
 };
 
 function _loadSubjectScript(src) {

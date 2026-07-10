@@ -34,8 +34,9 @@ KROOT = os.path.expanduser("~/Desktop/AI_MAC/tools/kokoro-venv")
 FF    = os.path.expanduser("~/Desktop/AI_MAC/tools/ffmpeg/ffmpeg")
 HERE  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-KOKORO_VOICE = "zf_xiaoxiao"
-EDGE_VOICE   = "zh-TW-HsiaoChenNeural"
+KOKORO_VOICE    = "zf_xiaoxiao"   # 中文預設(zh)
+KOKORO_VOICE_EN = "af_heart"      # 英文預設(en-us 美式女聲,使用者定案 2026-07-10)
+EDGE_VOICE      = "zh-TW-HsiaoChenNeural"
 
 # 多字元詞先換(順序重要)
 WORDS = [
@@ -78,38 +79,54 @@ def say(t):
 
 # ── Kokoro 引擎 ───────────────────────────────────────────────────────────────
 
-def gen_kokoro(caps, outdir, force):
-    """用 Kokoro zf_xiaoxiao 產 mp3。"""
+def gen_kokoro(caps, outdir, force, lang="zh"):
+    """用 Kokoro 產 mp3。
+    lang="zh": misaki.zh G2P + zf_xiaoxiao(中文);say() 符號正規化。
+    lang="en": Kokoro 內建 en-us 音素化 + af_heart(英文句子直接餵原文,不套 say())。
+    """
     try:
         import soundfile as sf
         from kokoro_onnx import Kokoro
-        from misaki import zh
     except ImportError as e:
         print(f"錯誤:Kokoro 依賴未安裝({e}),請用 kokoro-venv 執行", file=sys.stderr)
         sys.exit(1)
 
-    k   = Kokoro(f"{KROOT}/kokoro-v1.0.onnx", f"{KROOT}/voices-v1.0.bin")
-    g2p = zh.ZHG2P()
+    is_en = (lang == "en")
+    if not is_en:
+        try:
+            from misaki import zh
+        except ImportError as e:
+            print(f"錯誤:misaki.zh 未安裝({e})", file=sys.stderr)
+            sys.exit(1)
+        g2p = zh.ZHG2P()
+
+    k = Kokoro(f"{KROOT}/kokoro-v1.0.onnx", f"{KROOT}/voices-v1.0.bin")
+    voice = KOKORO_VOICE_EN if is_en else KOKORO_VOICE
     manifest = {}
     made = skipped = 0
 
     for c in caps:
         key    = f"{c['id']}_{c['i']}"
         mp3    = os.path.join(outdir, f"{key}.mp3")
-        spoken = say(c["cap"])
+        # 英文句子直接發音(不套 say() 中文符號正規化);中文走 say()
+        spoken = c["cap"] if is_en else say(c["cap"])
         manifest[key] = spoken
         if os.path.exists(mp3) and not force:
             skipped += 1
             continue
-        ph, _ = g2p(spoken)
-        samples, sr = k.create(ph, voice=KOKORO_VOICE, speed=1.0, is_phonemes=True)
+        if is_en:
+            samples, sr = k.create(spoken, voice=voice, speed=1.0,
+                                   lang="en-us", is_phonemes=False)
+        else:
+            ph, _ = g2p(spoken)
+            samples, sr = k.create(ph, voice=voice, speed=1.0, is_phonemes=True)
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             sf.write(tf.name, samples, sr)
             subprocess.run([FF, "-y", "-i", tf.name, "-b:a", "80k", mp3],
                            check=True, capture_output=True)
             os.unlink(tf.name)
         made += 1
-        print(f"  [kokoro] {key}: {spoken[:42]}")
+        print(f"  [kokoro:{lang}/{voice}] {key}: {spoken[:42]}")
 
     return manifest, made, skipped
 
@@ -192,11 +209,25 @@ _EDGE_SUBJECTS = ("science",)
 EDGE_DEFAULT_RATE = "+12%"
 
 
+# 英文科目:走 Kokoro 英文引擎(af_heart, en-us)
+_EN_SUBJECTS = ("english",)
+
+
 def _auto_engine(subject: str | None) -> str:
+    # 英文科目 → Kokoro(英文語系由 _auto_lang 決定 af_heart)
+    if subject and any(subject.startswith(p) for p in _EN_SUBJECTS):
+        return "kokoro"
     # 數學(None)也走 edge:曉臻台灣腔,含 say() 符號正規化
     if subject is None or any(subject.startswith(p) for p in _EDGE_SUBJECTS):
         return "edge"
     return "kokoro"
+
+
+def _auto_lang(subject: str | None) -> str:
+    """Kokoro 語系:english* → en(af_heart);其餘 → zh(zf_xiaoxiao)。"""
+    if subject and any(subject.startswith(p) for p in _EN_SUBJECTS):
+        return "en"
+    return "zh"
 
 
 def main():
@@ -220,6 +251,18 @@ def main():
                 sys.exit(1)
     if engine is None:
         engine = _auto_engine(subject)
+
+    # --lang <zh|en>  (僅 kokoro 引擎生效;不傳則依科目自動選)
+    lang = None
+    if "--lang" in sys.argv:
+        idx = sys.argv.index("--lang")
+        if idx + 1 < len(sys.argv):
+            lang = sys.argv[idx + 1]
+            if lang not in ("zh", "en"):
+                print(f"錯誤:--lang 必須是 zh 或 en,收到 {lang!r}", file=sys.stderr)
+                sys.exit(1)
+    if lang is None:
+        lang = _auto_lang(subject)
 
     # --rate <+12%>  (僅 edge 引擎生效;預設 EDGE_DEFAULT_RATE)
     rate = EDGE_DEFAULT_RATE
@@ -245,7 +288,7 @@ def main():
 
     # 呼叫對應引擎
     if engine == "kokoro":
-        manifest, made, skipped = gen_kokoro(caps, outdir, force)
+        manifest, made, skipped = gen_kokoro(caps, outdir, force, lang=lang)
     else:
         manifest, made, skipped = gen_edge(caps, outdir, force, rate=rate)
 
