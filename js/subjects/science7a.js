@@ -9,190 +9,232 @@
 EP["S"] = ["臺灣國中七上自然科(原創)", "https://github.com/klmtseng/junior-math-lab"];
 
 /* ================================================================
-   S7A_01 — 細胞基本構造(植物 vs 動物分類互動)
-   互動:把構造標籤從「待分類區」拖進「植物才有」或「動植物都有」框
+   S7A_01 — 細胞基本構造(植物/動物「有無」複選矩陣)
+   互動:7 個構造 × (植物有?/動物有?) 兩欄可各自勾選(可複選)。
+         共有構造(細胞膜/核/質/粒線體)兩欄都勾;植物特有只勾植物欄。
+         全部 7×2=14 個判斷都正確才通關。答錯格標紅並顯示正解。
    ================================================================ */
 const S7A_01 = {
   id: "S7A_01", short: "細胞構造",
   title: "關 S7A-1|細胞:植物與動物的不同長相",
   ep: "S", subj: "s7a",
-  intro: `<p>所有生物都由<b>細胞</b>組成。植物細胞和動物細胞有幾個共同的構造,也有幾個「植物才有」的東西。</p><p>把右邊的構造標籤<b>拖進正確的框框</b>:「植物才有」或「動植物都有」。動物細胞沒有的構造,植物細胞才有。</p>`,
-  formal: `<p class="math">植物細胞特有:細胞壁、葉綠體、液胞(大型中央液胞)。動植物共有:細胞膜、細胞核、粒線體。</p>`,
+  intro: `<p>所有生物都由<b>細胞</b>組成。有些構造<b>植物才有</b>,有些是<b>動植物共有</b>。</p><p>下面的表格,每個構造請判斷「植物有?」「動物有?」——<b>共有的構造要兩欄都勾</b>。全部判斷正確才過關。</p>`,
+  formal: `<p class="math">植物細胞<b>特有</b>:細胞壁、葉綠體、液胞(大型中央液胞)。動植物<b>共有</b>:細胞膜、細胞核、細胞質、粒線體。判斷關鍵在「動物有沒有」——共有構造動物也要打勾。</p>`,
   goals: [
-    { id: "S7A_01-a", text: "正確分類全部 6 個細胞構造" },
+    { id: "S7A_01-a", text: "正確判斷 7 個構造在植物/動物的有無(共 14 判斷全對)" },
   ],
 
-  /* 構造資料:plant=true → 植物才有;plant=false → 動植物都有 */
+  /* 構造資料:hasPlant / hasAnimal = 正解;desc = 提示/解析 */
   _PARTS: [
-    { name: "細胞壁",  plant: true,  desc: "植物細胞外層硬殼,提供支撐與保護" },
-    { name: "葉綠體",  plant: true,  desc: "進行光合作用,把陽光轉成有機物" },
-    { name: "液胞",    plant: true,  desc: "大型中央液胞儲水調節滲透壓" },
-    { name: "細胞膜",  plant: false, desc: "控制物質進出,動植物都有" },
-    { name: "細胞核",  plant: false, desc: "含 DNA,控制細胞活動" },
-    { name: "粒線體",  plant: false, desc: "細胞的能量工廠,進行細胞呼吸" },
+    { name: "細胞壁",  hasPlant: true,  hasAnimal: false, desc: "植物細胞外層硬殼,提供支撐與保護;動物細胞沒有" },
+    { name: "葉綠體",  hasPlant: true,  hasAnimal: false, desc: "進行光合作用,把陽光轉成有機物;動物細胞沒有" },
+    { name: "液胞",    hasPlant: true,  hasAnimal: false, desc: "動物細胞的液胞小而少,國中以植物的大型中央液胞為特徵,故視為植物特有" },
+    { name: "細胞膜",  hasPlant: true,  hasAnimal: true,  desc: "控制物質進出;動植物都有" },
+    { name: "細胞核",  hasPlant: true,  hasAnimal: true,  desc: "含 DNA,控制細胞活動;動植物都有" },
+    { name: "細胞質",  hasPlant: true,  hasAnimal: true,  desc: "細胞膜內的膠狀基質,胞器懸浮其中;動植物都有" },
+    { name: "粒線體",  hasPlant: true,  hasAnimal: true,  desc: "細胞的能量工廠,進行細胞呼吸;動植物都有" },
   ],
 
-  /* state.placed: { [name]: "plant"|"both"|null } */
-  state: { placed: {} },
+  /* state.mark: { [name]: { plant: bool, animal: bool } };
+     state.checked: 是否已按「檢查答案」(顯示對錯回饋)*/
+  state: { mark: {}, checked: false },
+
+  _blank() {
+    const m = {};
+    this._PARTS.forEach(p => { m[p.name] = { plant: false, animal: false }; });
+    return m;
+  },
 
   enter() {
-    this.state.placed = {};
-    this._PARTS.forEach((p) => { this.state.placed[p.name] = null; });
+    this.state.mark = this._blank();
+    this.state.checked = false;
     this._renderCtl && this._renderCtl();
   },
 
-  /* demo:自動播放分類步驟(供示範旁白對應) */
+  /* demo:自動示範如何勾選(6 步,對應既有旁白 S7A_01_0..5)*/
   demo() {
     const s = this.state, lv = this;
     const R = () => lv._renderCtl && lv._renderCtl();
+    const set = (name, plant, animal) => { s.mark[name] = { plant, animal }; };
     return [
       {
-        call: () => { s.placed = {}; lv._PARTS.forEach(p => s.placed[p.name] = null); R(); },
+        call: () => { s.mark = lv._blank(); s.checked = false; R(); },
         cap: "細胞是生命的基本單位。先看哪些構造植物才有?",
         dur: 2800,
       },
       {
-        call: () => { s.placed["細胞壁"] = "plant"; R(); },
-        cap: "細胞壁:植物才有。提供支撐,動物細胞沒有這層硬殼",
+        call: () => { set("細胞壁", true, false); R(); },
+        cap: "細胞壁是植物才有的。它就像房子的外牆,提供支撐,動物細胞沒有這層硬殼",
         dur: 2600,
       },
       {
-        call: () => { s.placed["葉綠體"] = "plant"; R(); },
-        cap: "葉綠體:植物才有。負責光合作用,把陽光轉成養分",
+        call: () => { set("葉綠體", true, false); R(); },
+        cap: "葉綠體也是植物才有。負責光合作用,把陽光轉成養分,動物不行光合作用",
         dur: 2600,
       },
       {
-        call: () => { s.placed["液胞"] = "plant"; R(); },
-        cap: "液胞:植物才有。大型中央液胞儲水,讓植物挺立不萎縮",
+        call: () => { set("液胞", true, false); R(); },
+        cap: "液胞是植物才有的大型儲水構造,讓植物挺立不萎縮,動物細胞的液胞很小",
         dur: 2600,
-      },
-      {
-        call: () => { s.placed["細胞膜"] = "both"; s.placed["細胞核"] = "both"; s.placed["粒線體"] = "both"; R(); },
-        cap: "細胞膜、細胞核、粒線體:動植物都有。現在換你自己試試看!",
-        dur: 3000,
       },
       {
         call: () => {
-          s.placed = {};
-          lv._PARTS.forEach(p => s.placed[p.name] = null);
-          R();
+          set("細胞膜", true, true); set("細胞核", true, true);
+          set("細胞質", true, true); set("粒線體", true, true); R();
         },
-        cap: "換你試試!把每個構造拖進正確的框",
-        dur: 1800,
+        cap: "細胞膜、細胞核、細胞質、粒線體動植物都有,所以植物和動物兩欄都要打勾",
+        dur: 3200,
+      },
+      {
+        call: () => { s.mark = lv._blank(); s.checked = false; R(); },
+        cap: "換你試試!每個構造判斷植物有沒有、動物有沒有,共有的兩欄都勾",
+        dur: 2000,
       },
     ];
   },
 
-  /* controls:拖放分類 UI */
+  /* controls:植物/動物「有無」複選矩陣 */
   controls(el) {
     const s = this.state, lv = this;
-    const render = () => {
-      const unplaced = lv._PARTS.filter(p => s.placed[p.name] === null);
-      const inPlant  = lv._PARTS.filter(p => s.placed[p.name] === "plant");
-      const inBoth   = lv._PARTS.filter(p => s.placed[p.name] === "both");
-      const allDone  = unplaced.length === 0;
-      const allRight = allDone && lv._PARTS.every(p =>
-        (p.plant && s.placed[p.name] === "plant") || (!p.plant && s.placed[p.name] === "both")
-      );
 
-      const chip = (p, zone) =>
-        `<span class="cell-chip${zone === "pool" ? "" : " placed"}" data-name="${p.name}" data-zone="${zone}" title="${p.desc}">${p.name}</span>`;
+    /* 單一判斷是否正確(col = "plant"|"animal") */
+    const cellRight = (p, col) =>
+      (col === "plant" ? s.mark[p.name].plant === p.hasPlant
+                       : s.mark[p.name].animal === p.hasAnimal);
+    const allRight = () => lv._PARTS.every(p => cellRight(p, "plant") && cellRight(p, "animal"));
+    const wrongCount = () =>
+      lv._PARTS.reduce((n, p) => n + (cellRight(p, "plant") ? 0 : 1) + (cellRight(p, "animal") ? 0 : 1), 0);
+
+    const render = () => {
+      const checked = s.checked;
+      const good = allRight();
+
+      /* 一格:核取方塊 + (檢查後) 對錯底色 + 正解提示 */
+      const cell = (p, col) => {
+        const on = col === "plant" ? s.mark[p.name].plant : s.mark[p.name].animal;
+        const want = col === "plant" ? p.hasPlant : p.hasAnimal;
+        const ok = on === want;
+        const cls = "cm-cell" + (checked ? (ok ? " cm-ok" : " cm-bad") : "");
+        const box = on ? "✓" : "";
+        const fix = (checked && !ok)
+          ? `<span class="cm-fix">正解:${want ? "有 ✓" : "無"}</span>` : "";
+        return `<td class="${cls}" data-name="${p.name}" data-col="${col}">
+                  <span class="cm-box">${box}</span>${fix}
+                </td>`;
+      };
+
+      const rows = lv._PARTS.map(p => `
+        <tr>
+          <th class="cm-name" title="${p.desc}">${p.name}<span class="cm-hint">?</span></th>
+          ${cell(p, "plant")}
+          ${cell(p, "animal")}
+        </tr>`).join("");
 
       el.innerHTML = `
         <style>
-          .cell-zone { border: 2px dashed #55648f; border-radius: 8px; padding: 8px 10px; min-height: 52px; margin: 4px 0; }
-          .cell-zone.correct { border-color: #4ade80; background: rgba(74,222,128,.1); }
-          .cell-zone.wrong   { border-color: #ff5c7a; background: rgba(255,92,122,.08); }
-          .cell-zone-label { font-size: 13px; color: #9aa5c4; margin-bottom: 4px; font-weight: bold; }
-          .cell-chip { display: inline-block; background: #1d2440; border: 1.5px solid #55648f;
-            border-radius: 6px; padding: 5px 12px; margin: 3px; cursor: pointer; font-size: 14px;
-            user-select: none; transition: background .15s; }
-          .cell-chip:hover { background: #2e3a63; }
-          .cell-chip.placed { border-color: #4ade80; }
-          .cell-pool-label { font-size: 13px; color: #9aa5c4; margin: 8px 0 4px; font-weight: bold; }
+          .cellmatrix { border-collapse: collapse; width: 100%; font-size: 14px; }
+          .cellmatrix th, .cellmatrix td { border: 1.5px solid #39456e; padding: 6px 4px; text-align: center; }
+          .cellmatrix thead th { color: #9aa5c4; font-size: 13px; background: #171d34; }
+          .cellmatrix .cm-name { text-align: left; padding-left: 8px; color: #dfe4f5; white-space: nowrap; position: relative; }
+          .cellmatrix .cm-hint { color: #55648f; font-size: 11px; margin-left: 3px; cursor: help; }
+          .cellmatrix .cm-cell { cursor: pointer; user-select: none; min-width: 78px; transition: background .12s; }
+          .cellmatrix .cm-cell:hover { background: #2e3a63; }
+          .cellmatrix .cm-box { display: inline-block; width: 20px; height: 20px; line-height: 20px;
+            border: 1.5px solid #55648f; border-radius: 5px; background: #1d2440; color: #4ade80; font-weight: bold; }
+          .cellmatrix .cm-ok  { background: rgba(74,222,128,.12); }
+          .cellmatrix .cm-bad { background: rgba(255,92,122,.14); }
+          .cellmatrix .cm-fix { display: block; font-size: 11px; color: #ff8fa3; margin-top: 2px; }
+          .cm-plant-h { color: #6ee7a0 !important; }
+          .cm-animal-h { color: #f0b56b !important; }
+          .cm-actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+          .cm-msg { margin-top: 6px; }
         </style>
-        <div class="cell-zone-label">🌿 植物才有</div>
-        <div class="cell-zone${allDone ? (inPlant.every(p=>p.plant) && inBoth.every(p=>!p.plant) ? " correct" : " wrong") : ""}" id="zone-plant">
-          ${inPlant.map(p => chip(p, "plant")).join("")}
+        <table class="cellmatrix">
+          <thead>
+            <tr><th style="text-align:left;padding-left:8px">構造</th>
+                <th class="cm-plant-h">🌿 植物有?</th>
+                <th class="cm-animal-h">🐾 動物有?</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div class="cm-actions">
+          <button id="cm-check">檢查答案</button>
+          <button id="cm-reset">清除重做</button>
         </div>
-        <div class="cell-zone-label" style="margin-top:8px">🔵 動植物都有</div>
-        <div class="cell-zone${allDone ? (inBoth.every(p=>!p.plant) && inPlant.every(p=>p.plant) ? " correct" : " wrong") : ""}" id="zone-both">
-          ${inBoth.map(p => chip(p, "both")).join("")}
-        </div>
-        <div class="cell-pool-label">待分類</div>
-        <div id="zone-pool">
-          ${unplaced.map(p => chip(p, "pool")).join("")}
-        </div>
-        ${allDone ? `<div class="row quiz-msg" style="margin-top:8px">${allRight ? '<b style="color:#4ade80">全部正確!植物細胞的三個特有構造都找到了!</b>' : '<b style="color:#ff5c7a">有分錯,再試試</b>'}</div>` : ""}
-        ${allDone && !allRight ? `<button id="s7a01-reset" style="margin-top:4px">重新分類</button>` : ""}
+        ${checked ? `<div class="row quiz-msg cm-msg">${good
+            ? '<b style="color:#4ade80">全部正確!你分清楚了植物特有與動植物共有的構造。</b>'
+            : `<b style="color:#ff5c7a">還有 ${wrongCount()} 個判斷要修正</b>(紅色格已標出正解;共有構造記得動物欄也要打勾)`}</div>` : ""}
       `;
 
-      /* 點擊操作:點待分類的 chip → 循環到「植物才有」→「動植物都有」→ null */
-      el.querySelectorAll(".cell-chip").forEach(chip => {
-        chip.onclick = () => {
-          const name = chip.dataset.name;
-          const cur = s.placed[name];
-          if (cur === null) s.placed[name] = "plant";
-          else if (cur === "plant") s.placed[name] = "both";
-          else s.placed[name] = null;
+      /* 點格切換勾選(可複選:兩欄各自獨立)*/
+      el.querySelectorAll(".cm-cell").forEach(td => {
+        td.onclick = () => {
+          const name = td.dataset.name, col = td.dataset.col;
+          s.mark[name][col] = !s.mark[name][col];
+          s.checked = false;   // 一改動就撤下先前的對錯回饋
           render();
         };
       });
+      el.querySelector("#cm-check").onclick = () => { s.checked = true; render(); };
+      el.querySelector("#cm-reset").onclick = () => { s.mark = lv._blank(); s.checked = false; render(); };
 
-      el.querySelector("#s7a01-reset") && (el.querySelector("#s7a01-reset").onclick = () => {
-        lv._PARTS.forEach(p => s.placed[p.name] = null);
-        render();
-      });
-
-      if (allRight) markGoal("S7A_01-a");
+      if (s.checked && good) markGoal("S7A_01-a");
     };
     this._renderCtl = render;
     render();
   },
 
-  /* draw:Canvas 2D 雙細胞示意圖 */
+  /* draw:Canvas 2D 雙細胞示意圖(高亮跟著矩陣勾選走) */
   draw() {
-    const s = this.state;
+    const s = this.state, m = s.mark;
+    // 高亮判定:植物側看該構造 plant 欄勾了沒;動物側看 animal 欄
+    const pOn = (n) => !!(m[n] && m[n].plant);
+    const aOn = (n) => !!(m[n] && m[n].animal);
+
     const W = canvas.width, H = canvas.height;
     const cx1 = W * 0.28, cx2 = W * 0.72, cy = H * 0.42, R = 105;
 
     /* ── 植物細胞(左) ── */
     // 細胞壁(外框,方形)
     const wOff = 14;
-    g.strokeStyle = s.placed["細胞壁"] === "plant" ? "#4ade80" : "#55648f";
+    g.strokeStyle = pOn("細胞壁") ? "#4ade80" : "#55648f";
     g.lineWidth = 4;
     g.strokeRect(cx1 - R - wOff, cy - R - wOff, (R + wOff) * 2, (R + wOff) * 2);
 
     // 細胞膜(橢圓形)
-    g.strokeStyle = s.placed["細胞膜"] === "both" ? "#38bdf8" : "#55648f";
+    g.strokeStyle = pOn("細胞膜") ? "#38bdf8" : "#55648f";
     g.lineWidth = 2.5;
     g.beginPath(); g.ellipse(cx1, cy, R, R * 0.88, 0, 0, 7); g.stroke();
 
     // 液胞(大型中央水藍色)
-    g.fillStyle = s.placed["液胞"] === "plant" ? "rgba(56,189,248,.28)" : "rgba(56,189,248,.10)";
-    g.strokeStyle = s.placed["液胞"] === "plant" ? "#38bdf8" : "#39456e";
+    g.fillStyle = pOn("液胞") ? "rgba(56,189,248,.28)" : "rgba(56,189,248,.10)";
+    g.strokeStyle = pOn("液胞") ? "#38bdf8" : "#39456e";
     g.lineWidth = 1.5;
     g.beginPath(); g.ellipse(cx1, cy - 6, 54, 46, 0, 0, 7);
     g.fill(); g.stroke();
 
+    // 細胞質(植物,底層淡色填充)
+    g.fillStyle = pOn("細胞質") ? "rgba(148,163,184,.20)" : "rgba(148,163,184,.06)";
+    g.beginPath(); g.ellipse(cx1, cy, R - 6, R * 0.88 - 6, 0, 0, 7); g.fill();
+
     // 葉綠體(3 顆綠色橢圓)
     [[cx1 - 44, cy + 40], [cx1 + 22, cy + 50], [cx1 - 18, cy + 62]].forEach(([ex, ey]) => {
-      g.fillStyle = s.placed["葉綠體"] === "plant" ? "rgba(74,222,128,.70)" : "rgba(74,222,128,.25)";
-      g.strokeStyle = s.placed["葉綠體"] === "plant" ? "#4ade80" : "#2e3a63";
+      g.fillStyle = pOn("葉綠體") ? "rgba(74,222,128,.70)" : "rgba(74,222,128,.25)";
+      g.strokeStyle = pOn("葉綠體") ? "#4ade80" : "#2e3a63";
       g.lineWidth = 1.5;
       g.beginPath(); g.ellipse(ex, ey, 16, 9, 0.4, 0, 7); g.fill(); g.stroke();
     });
 
     // 細胞核(植物)
-    g.fillStyle = s.placed["細胞核"] === "both" ? "rgba(251,191,36,.55)" : "rgba(251,191,36,.2)";
-    g.strokeStyle = s.placed["細胞核"] === "both" ? "#fbbf24" : "#39456e";
+    g.fillStyle = pOn("細胞核") ? "rgba(251,191,36,.55)" : "rgba(251,191,36,.2)";
+    g.strokeStyle = pOn("細胞核") ? "#fbbf24" : "#39456e";
     g.lineWidth = 2;
     g.beginPath(); g.arc(cx1 - 22, cy - 22, 20, 0, 7); g.fill(); g.stroke();
 
     // 粒線體(植物,2 個)
     [[cx1 + 50, cy + 14], [cx1 + 60, cy - 30]].forEach(([mx, my]) => {
-      g.fillStyle = s.placed["粒線體"] === "both" ? "rgba(167,139,250,.60)" : "rgba(167,139,250,.20)";
-      g.strokeStyle = s.placed["粒線體"] === "both" ? "#a78bfa" : "#39456e";
+      g.fillStyle = pOn("粒線體") ? "rgba(167,139,250,.60)" : "rgba(167,139,250,.20)";
+      g.strokeStyle = pOn("粒線體") ? "#a78bfa" : "#39456e";
       g.lineWidth = 1.5;
       g.beginPath(); g.ellipse(mx, my, 12, 7, 0.5, 0, 7); g.fill(); g.stroke();
     });
@@ -201,51 +243,39 @@ const S7A_01 = {
 
     /* ── 動物細胞(右) ── */
     // 細胞膜(不規則橢圓)
-    g.strokeStyle = s.placed["細胞膜"] === "both" ? "#38bdf8" : "#55648f";
+    g.strokeStyle = aOn("細胞膜") ? "#38bdf8" : "#55648f";
     g.lineWidth = 2.5;
     g.beginPath(); g.ellipse(cx2, cy, R * 0.92, R, 0.15, 0, 7); g.stroke();
 
+    // 細胞質(動物,底層淡色填充)
+    g.fillStyle = aOn("細胞質") ? "rgba(148,163,184,.20)" : "rgba(148,163,184,.06)";
+    g.beginPath(); g.ellipse(cx2, cy, R * 0.92 - 6, R - 6, 0.15, 0, 7); g.fill();
+
     // 細胞核(動物)
-    g.fillStyle = s.placed["細胞核"] === "both" ? "rgba(251,191,36,.55)" : "rgba(251,191,36,.2)";
-    g.strokeStyle = s.placed["細胞核"] === "both" ? "#fbbf24" : "#39456e";
+    g.fillStyle = aOn("細胞核") ? "rgba(251,191,36,.55)" : "rgba(251,191,36,.2)";
+    g.strokeStyle = aOn("細胞核") ? "#fbbf24" : "#39456e";
     g.lineWidth = 2;
     g.beginPath(); g.arc(cx2 - 10, cy - 10, 22, 0, 7); g.fill(); g.stroke();
 
     // 粒線體(動物,3 個)
     [[cx2 + 46, cy + 18], [cx2 - 50, cy + 30], [cx2 + 30, cy - 50]].forEach(([mx, my]) => {
-      g.fillStyle = s.placed["粒線體"] === "both" ? "rgba(167,139,250,.60)" : "rgba(167,139,250,.20)";
-      g.strokeStyle = s.placed["粒線體"] === "both" ? "#a78bfa" : "#39456e";
+      g.fillStyle = aOn("粒線體") ? "rgba(167,139,250,.60)" : "rgba(167,139,250,.20)";
+      g.strokeStyle = aOn("粒線體") ? "#a78bfa" : "#39456e";
       g.lineWidth = 1.5;
       g.beginPath(); g.ellipse(mx, my, 12, 7, -0.3, 0, 7); g.fill(); g.stroke();
     });
 
     pText(cx2, cy + R + 22, "動物細胞", TH.text, 15, "center", true);
 
-    /* ── 標籤(已放置的顯示在圖上) ── */
-    const labelPos = {
-      "細胞壁":  [cx1,      cy - R - wOff - 14],
-      "葉綠體":  [cx1 - 16, cy + 60],
-      "液胞":    [cx1,      cy - 16],
-      "細胞膜":  [cx1 + R * 0.7, cy + 10],
-      "細胞核":  [cx1 - 22, cy - 22],
-      "粒線體":  [cx1 + 60, cy - 10],
-    };
-    Object.entries(labelPos).forEach(([name, [lx, ly]]) => {
-      if (s.placed[name]) {
-        const col = s.placed[name] === "plant" ? "#4ade80" : "#38bdf8";
-        g.fillStyle = "rgba(10,14,26,.7)";
-        const tw = name.length * 14 + 8;
-        g.fillRect(lx - tw / 2, ly - 14, tw, 20);
-        pText(lx, ly, name, col, 13, "center", true);
-      }
-    });
-
-    /* ── readout ── */
-    const placed = this._PARTS.filter(p => s.placed[p.name] !== null).length;
+    /* ── readout:提示尚有幾格待判斷/已完成 ── */
+    const filled = this._PARTS.reduce((n, p) =>
+      n + ((m[p.name] && (m[p.name].plant || m[p.name].animal)) ? 1 : 0), 0);
     const total = this._PARTS.length;
-    readout.innerHTML = placed === total
-      ? `<b style="color:#4ade80">全部分類完成!確認右側結果</b>`
-      : `已分類 <b>${placed}/${total}</b> 個構造`;
+    readout.innerHTML = s.checked
+      ? (this._PARTS.every(p => m[p.name].plant === p.hasPlant && m[p.name].animal === p.hasAnimal)
+          ? `<b style="color:#4ade80">全部判斷正確!</b>`
+          : `<b style="color:#ff5c7a">有格子判斷錯,看右側紅色標示的正解</b>`)
+      : `已判斷 <b>${filled}/${total}</b> 個構造 — 記得按「檢查答案」`;
   },
 };
 

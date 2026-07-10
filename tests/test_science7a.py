@@ -9,7 +9,8 @@ test_science7a.py — S7A_01 自然科關卡驗收
   T1 ?subject=science7a 載入後科目按鈕顯示「七上自然」
   T2 tabs 有 1 個關卡「細胞構造」
   T3 點開關卡:intro 文字出現(含「細胞」)
-  T4 分類互動:依序點選 6 個 chip 完成分類,goal 觸發(S7A_01-a)
+  T4 複選矩陣:7 構造 × 植物/動物勾選正解 → 檢查答案 → goal 觸發(S7A_01-a);
+     並驗證「答錯 → 有紅色標示(.cm-bad)且未通關」
   T5 demo() 自動示範可跑完(player 啟動後 active 最終為 false)
   T6 零 console error
 port 8801
@@ -64,41 +65,49 @@ try:
         t3 = "細胞" in intro_text
         p("T3 intro 含「細胞」文字", t3, f"intro[:30]={intro_text[:30]!r}")
 
-        # T4 分類互動:把所有待分類的 chip 都點到正確位置
         # 先跳過示範(若正在播)
         demo_btn = pg.query_selector("#demo-btn")
         if demo_btn and "跳過" in (demo_btn.text_content() or ""):
             demo_btn.click()
             pg.wait_for_timeout(500)
 
-        # 期望各 chip 的正確 zone:plant=植物才有(plant), both=動植物都有(both)
+        # 每個構造的正解:(植物有?, 動物有?)
+        # 植物特有(只植物):細胞壁/葉綠體/液胞;共有(兩欄都勾):細胞膜/核/質/粒線體
         CORRECT = {
-            "細胞壁": "plant",
-            "葉綠體": "plant",
-            "液胞":   "plant",
-            "細胞膜": "both",
-            "細胞核": "both",
-            "粒線體": "both",
+            "細胞壁": (True, False),
+            "葉綠體": (True, False),
+            "液胞":   (True, False),
+            "細胞膜": (True, True),
+            "細胞核": (True, True),
+            "細胞質": (True, True),
+            "粒線體": (True, True),
         }
-        # 點擊直到所有 chip 都放到正確的 zone
-        # chip 的 data-zone 告訴現在在哪個 zone
-        # 點一下:null→plant; 再點:plant→both; 再點:both→null
-        for name, target in CORRECT.items():
-            for _ in range(3):  # 最多循環 3 次
-                chip = pg.query_selector(f'.cell-chip[data-name="{name}"]')
-                if not chip:
-                    break
-                zone = chip.get_attribute("data-zone")
-                if zone == target:
-                    break
-                chip.click()
-                pg.wait_for_timeout(150)
 
+        def click_cell(name, col):
+            td = pg.query_selector(f'.cm-cell[data-name="{name}"][data-col="{col}"]')
+            assert td, f"找不到格子 {name}/{col}"
+            td.click()
+            pg.wait_for_timeout(60)
+
+        # ── T4a:先製造一個錯誤(粒線體漏勾動物)並檢查 → 應標紅且不通關 ──
+        for name, (wp, wa) in CORRECT.items():
+            if wp: click_cell(name, "plant")
+            if wa and name != "粒線體": click_cell(name, "animal")  # 故意漏勾粒線體動物欄
+        pg.query_selector("#cm-check").click()
+        pg.wait_for_timeout(300)
+        has_bad = pg.query_selector(".cm-bad") is not None
+        prog_wrong = json.loads(pg.evaluate("() => localStorage.getItem('jrlab-progress-v1')") or "{}")
+        t4a = has_bad and prog_wrong.get("S7A_01-a") != True
+        p("T4a 答錯有紅色標示(.cm-bad)且未通關", t4a,
+          f"cm-bad={has_bad} goal={prog_wrong.get('S7A_01-a')}")
+
+        # ── T4b:補上漏勾的粒線體動物欄 → 全對 → 檢查 → 通關 ──
+        click_cell("粒線體", "animal")
+        pg.query_selector("#cm-check").click()
         pg.wait_for_timeout(400)
-        # 驗:progress S7A_01-a 是否觸發
         prog = json.loads(pg.evaluate("() => localStorage.getItem('jrlab-progress-v1')") or "{}")
         t4 = prog.get("S7A_01-a") == True
-        p("T4 分類完成 goal S7A_01-a 觸發", t4, f"S7A_01-a={prog.get('S7A_01-a')}")
+        p("T4b 全對後 goal S7A_01-a 觸發", t4, f"S7A_01-a={prog.get('S7A_01-a')}")
 
         # T5 demo() 示範可跑完:先重置狀態再啟動
         pg.evaluate("() => { try { levels[curIdx].enter(); } catch(e){} }")
