@@ -9,8 +9,8 @@ test_science7a.py — S7A_01 自然科關卡驗收
   T1 ?subject=science7a 載入後科目按鈕顯示「七上自然」
   T2 tabs 有 1 個關卡「細胞構造」
   T3 點開關卡:intro 文字出現(含「細胞」)
-  T4 複選矩陣:7 構造 × 植物/動物勾選正解 → 檢查答案 → goal 觸發(S7A_01-a);
-     並驗證「答錯 → 有紅色標示(.cm-bad)且未通關」
+  T4 拖曳關卡:7 構造拖入植物/動物細胞正解(共有構造入兩區)→ 檢查答案 → goal 觸發(S7A_01-a);
+     並驗證「答錯 → 有紅色標示(.dc-bad)且未通關」、來源清單常駐可複選、共有構造可入兩區
   T5 demo() 自動示範可跑完(player 啟動後 active 最終為 false)
   T6 零 console error
 port 8801
@@ -71,39 +71,54 @@ try:
             demo_btn.click()
             pg.wait_for_timeout(500)
 
-        # 每個構造的正解:(植物有?, 動物有?)
-        # 植物特有(只植物):細胞壁/葉綠體/液胞;共有(兩欄都勾):細胞膜/核/質/粒線體
+        # 每個構造的正解:(進植物細胞?, 進動物細胞?)
+        # 植物特有(只植物):細胞壁/葉綠體;共有(兩區都放):液胞/細胞膜/核/質/粒線體
         CORRECT = {
             "細胞壁": (True, False),
             "葉綠體": (True, False),
-            "液胞":   (True, False),
+            "液胞":   (True, True),
             "細胞膜": (True, True),
             "細胞核": (True, True),
             "細胞質": (True, True),
             "粒線體": (True, True),
         }
 
-        def click_cell(name, col):
-            td = pg.query_selector(f'.cm-cell[data-name="{name}"][data-col="{col}"]')
-            assert td, f"找不到格子 {name}/{col}"
-            td.click()
-            pg.wait_for_timeout(60)
+        # 來源清單常駐:每次放置用「點來源標籤 → 點細胞區」的 fallback(確定性,免拖曳抖動)
+        def place(name, zone):
+            src = pg.query_selector(f'.dc-src[data-name="{name}"]')
+            assert src, f"找不到來源標籤 {name}"
+            src.click()
+            pg.wait_for_timeout(40)
+            z = pg.query_selector(f'.dc-zone[data-zone="{zone}"]')
+            assert z, f"找不到放置區 {zone}"
+            z.click()
+            pg.wait_for_timeout(50)
 
-        # ── T4a:先製造一個錯誤(粒線體漏勾動物)並檢查 → 應標紅且不通關 ──
+        # 來源清單常駐性 + 可複選(7 個標籤都在,且放置後仍在)
+        src_count_before = len(pg.query_selector_all(".dc-src"))
+        # ── T4a:放好但故意漏放(粒線體不放動物區)並檢查 → 應標紅/漏放且不通關 ──
         for name, (wp, wa) in CORRECT.items():
-            if wp: click_cell(name, "plant")
-            if wa and name != "粒線體": click_cell(name, "animal")  # 故意漏勾粒線體動物欄
-        pg.query_selector("#cm-check").click()
+            if wp: place(name, "plant")
+            if wa and name != "粒線體": place(name, "animal")  # 故意漏放粒線體動物區
+        src_count_after = len(pg.query_selector_all(".dc-src"))
+        # 共有構造可入兩區:液胞應同時出現在植物與動物區的 chip
+        vac_plant = pg.query_selector('.dc-zone[data-zone="plant"] .dc-chip[data-name="液胞"]') is not None
+        vac_animal = pg.query_selector('.dc-zone[data-zone="animal"] .dc-chip[data-name="液胞"]') is not None
+        pg.query_selector("#dc-check").click()
         pg.wait_for_timeout(300)
-        has_bad = pg.query_selector(".cm-bad") is not None
+        has_bad_or_miss = (pg.query_selector(".dc-bad") is not None) or (pg.query_selector(".dc-fix") is not None)
         prog_wrong = json.loads(pg.evaluate("() => localStorage.getItem('jrlab-progress-v1')") or "{}")
-        t4a = has_bad and prog_wrong.get("S7A_01-a") != True
-        p("T4a 答錯有紅色標示(.cm-bad)且未通關", t4a,
-          f"cm-bad={has_bad} goal={prog_wrong.get('S7A_01-a')}")
+        t4a = has_bad_or_miss and prog_wrong.get("S7A_01-a") != True
+        p("T4a 答錯有標示(.dc-bad/.dc-fix)且未通關", t4a,
+          f"bad/miss={has_bad_or_miss} goal={prog_wrong.get('S7A_01-a')}")
+        p("T4c 來源清單常駐(放置後 7 標籤仍在)", src_count_before == 7 and src_count_after == 7,
+          f"before={src_count_before} after={src_count_after}")
+        p("T4d 共有構造可入兩區(液胞同時在植物+動物區)", vac_plant and vac_animal,
+          f"plant={vac_plant} animal={vac_animal}")
 
-        # ── T4b:補上漏勾的粒線體動物欄 → 全對 → 檢查 → 通關 ──
-        click_cell("粒線體", "animal")
-        pg.query_selector("#cm-check").click()
+        # ── T4b:補上漏放的粒線體動物區 → 全對 → 檢查 → 通關 ──
+        place("粒線體", "animal")
+        pg.query_selector("#dc-check").click()
         pg.wait_for_timeout(400)
         prog = json.loads(pg.evaluate("() => localStorage.getItem('jrlab-progress-v1')") or "{}")
         t4 = prog.get("S7A_01-a") == True
