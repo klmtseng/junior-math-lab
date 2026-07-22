@@ -2086,6 +2086,455 @@ const S7A_QZ = makeStaticSciDrill(
 );
 
 /* ================================================================
+   S7A_05 — 科學方法 + 生命特性
+   互動:概念卡片(6 張)+ 小測驗(5 題選擇題確認理解)
+   課綱:Da-Ⅳ-1(生命現象與生物體的組成)
+   知識點來源:
+     翰林 B1L1 Q26解析(觀察→問題→假說→實驗→結論)
+     翰林 B1L1 Q38/Q19解析(操作/控制/應變變因;實驗組vs對照組)
+     翰林 B1L1 Q49解析(科學方法標準步驟順序)
+     康軒 B1L1 Q30解析(生物具有代謝、生長、感應及生殖現象)
+     翰林 B1L1 Q14解析(蝴蝶生命現象:繁殖/感應/生長/代謝)
+     翰林 B1L1 Q8 題組解析(岩石/煤炭/牙刷=非生物)
+   ================================================================ */
+const S7A_05 = {
+  id: "S7A_05", short: "科學方法與生命特性",
+  title: "關 S7A-5|科學方法 + 生命特性",
+  ep: "S", subj: "s7a",
+  intro: `<p>科學家探究自然的方式叫「<b>科學方法</b>」——從觀察出發,依序:觀察→提出問題→提出假說→設計實驗→分析結果→形成結論。</p><p>生物與非生物的區別在於生物會表現「<b>生命現象</b>」:代謝、生長、感應與運動、生殖。</p><p>點選每張概念卡片了解詳細說明,全部查閱後作答 5 道小測驗。</p>`,
+  formal: `<p class="math">科學方法步驟:觀察→提出問題→提出假說→設計實驗→分析結果→形成結論<br>三種變因:操作變因(唯一改變)、控制變因(保持相同)、應變變因(觀測結果)<br>生命四特性:代謝、生長、感應與運動、生殖<br>課綱:Da-Ⅳ-1</p>`,
+  goals: [
+    { id: "S7A_05-a", text: "查閱全部 6 張概念卡片" },
+    { id: "S7A_05-b", text: "完成小測驗且答對率 ≥80%" },
+  ],
+
+  _CARDS: [
+    {
+      key: "sci_steps",
+      icon: "🔬",
+      color: "#38bdf8",
+      title: "科學方法的步驟",
+      body: "探究未知現象時依序進行：\n①觀察（發現現象）→②提出問題（問為什麼）→③提出假說（提出可驗證的解釋）→④設計實驗（驗證假說）→⑤分析結果→⑥形成結論",
+      note: "每個步驟都可能回頭修正假說，是循環精進的過程。",
+    },
+    {
+      key: "variables",
+      icon: "🧪",
+      color: "#a78bfa",
+      title: "實驗的三種變因",
+      body: "操作變因：實驗中「唯一改變」的因素，用來驗證假說。\n控制變因：實驗組與對照組「保持相同」的因素，排除干擾。\n應變變因：實驗後「觀測或量測」的結果。",
+      note: "每次實驗只能改變「一個」操作變因，才能確認因果關係。",
+    },
+    {
+      key: "ctrl_group",
+      icon: "⚗️",
+      color: "#fbbf24",
+      title: "實驗組與對照組",
+      body: "實驗組：接受「操作變因處理」的組別，是主要觀察對象。\n對照組：未接受操作變因處理的組別，作為比較基準。\n設計對照組的目的：排除其他因素干擾，確認操作變因才是原因。",
+      note: "沒有對照組的實驗結果無法說明因果；缺少對照組是常見實驗設計缺陷。",
+    },
+    {
+      key: "life_traits",
+      icon: "🌱",
+      color: "#4ade80",
+      title: "生命的四大特性",
+      body: "代謝：生物體內的物質分解或合成（如消化食物、呼吸）。\n生長：細胞數目增加或體積增大（如種子發芽）。\n感應與運動：對外界刺激產生反應（如植物向光、眼睛眨眼）。\n生殖：將自身特徵遺傳給後代（如開花結果、生育子女）。",
+      note: "生物必須能表現這四種生命現象；非生物雖有部分類似現象（如鐘乳石變長），但全部四項缺一。",
+    },
+    {
+      key: "bio_vs_nonbio",
+      icon: "🪨",
+      color: "#ff5c7a",
+      title: "生物與非生物的判斷",
+      body: "判斷是否為生物的關鍵：是否能表現「所有」生命現象（代謝＋生長＋感應＋生殖）。\n非生物例：岩石、煤炭、牙刷（無代謝、無生殖）。\n生物例：木棉、莫氏樹蛙、人類、台灣獼猴、玫瑰。\n注意：火焰能「移動」，鐘乳石能「生長」，但它們不能代謝或生殖，所以是非生物。",
+      note: "判準是四種生命現象「全部符合」，而非部分符合。",
+    },
+    {
+      key: "hypothesis",
+      icon: "💡",
+      color: "#fb923c",
+      title: "假說與結論",
+      body: "假說：針對觀察問題提出「合理且可驗證」的解釋，尚未被確認。\n結論：根據實驗結果支持或否定假說。\n一個好的假說必須：①合理解釋現象 ②可以用實驗驗證。\n實驗「否定」假說也是有價值的結果，科學不允許捏造數據。",
+      note: "「假說」不等於「猜測」；好的假說有理論依據且可被驗證。",
+    },
+  ],
+
+  /* 小測驗題目(5 題,查閱所有卡片後解鎖) */
+  _QUIZ: [
+    {
+      tid: "s7a_05_mini_q1",
+      q: "探究「天氣炎熱吐司較容易發霉」時,小英設計相關實驗——這整體探究過程稱為什麼?",
+      opts: ["A. 偶然現象", "B. 科學方法", "C. 預測理論", "D. 生活常識"],
+      ans: "B",
+      why: "從觀察（天熱發霉）出發並設計實驗驗證，是科學方法的完整流程。（康軒 B1L1 Q2解析）",
+    },
+    {
+      tid: "s7a_05_mini_q2",
+      q: "在「吐司發霉與溫度的關係」實驗中，小傑提出「低溫下吐司較不易發霉」——這句話屬於科學方法的哪個步驟?",
+      opts: ["A. 形成結論", "B. 觀察", "C. 形成假說", "D. 設計實驗"],
+      ans: "C",
+      why: "「低溫下吐司較不易發霉」是合理且可驗證的解釋，屬於形成假說。（翰林 B1L1 Q32解析）",
+    },
+    {
+      tid: "s7a_05_mini_q3",
+      q: "大雄用綠豆進行四組實驗，各組照光/泡水/溫度不同，七天後量發芽率——「發芽率」是哪種變因?",
+      opts: ["A. 操作變因", "B. 控制變因", "C. 應變變因", "D. 以上皆非"],
+      ans: "C",
+      why: "應變變因是實驗後「要觀測或量測的結果」；「七天後的發芽率」是被量測的結果，屬應變變因。（翰林 B1L1 Q19解析）",
+    },
+    {
+      tid: "s7a_05_mini_q4",
+      q: "蝴蝶能繁衍下一代、對花蜜產生反應、能生長、具有代謝作用——下列哪一項「不是」蝴蝶展現的生命現象?",
+      opts: ["A. 代謝", "B. 感應", "C. 生殖", "D. 行光合作用製造養分"],
+      ans: "D",
+      why: "光合作用是植物（含葉綠體）才有的功能，蝴蝶是動物，沒有葉綠體，不能行光合作用。代謝、感應、生殖都是蝴蝶具備的生命現象。（翰林 B1L1 Q14解析）",
+    },
+    {
+      tid: "s7a_05_mini_q5",
+      q: "下列哪一項屬於「非生物」?(甲)木棉 (乙)岩石 (丙)莫氏樹蛙 (丁)煤炭 (戊)野牡丹",
+      opts: ["A. 甲丙戊", "B. 乙丁", "C. 甲乙丙", "D. 乙丙丁"],
+      ans: "B",
+      why: "岩石與煤炭沒有代謝、生長、感應、生殖能力，屬非生物；木棉、莫氏樹蛙、野牡丹均是生物。（翰林 B1L1 Q8解析）",
+    },
+  ],
+
+  state: {
+    viewed: new Set(),
+    phase: "cards",   // cards | quiz
+    qi: 0,
+    answers: [],      // [{ ans, correct }]
+    quizDone: false,
+  },
+
+  enter() {
+    this.state.viewed = new Set();
+    this.state.phase = "cards";
+    this.state.qi = 0;
+    this.state.answers = [];
+    this.state.quizDone = false;
+    this._renderCtl && this._renderCtl();
+  },
+
+  demo() {
+    const s = this.state, lv = this;
+    const R = () => lv._renderCtl && lv._renderCtl();
+    return [
+      {
+        call: () => { s.viewed = new Set(); s.phase = "cards"; R(); },
+        cap: "科學方法是科學家探究自然的標準流程:觀察、提出問題、提出假說、設計實驗、分析結果、形成結論。",
+        dur: 3400,
+      },
+      {
+        call: () => { s.viewed = new Set(["sci_steps"]); R(); },
+        cap: "設計實驗時要注意三種變因。操作變因是唯一改變的因素;控制變因是兩組保持相同的條件;應變變因是量測的結果。",
+        dur: 3600,
+      },
+      {
+        call: () => { s.viewed = new Set(["sci_steps","variables"]); R(); },
+        cap: "實驗要有對照組和實驗組。實驗組是接受操作變因的那組;對照組是不接受操作的基準。沒有對照組就無法確認因果。",
+        dur: 3400,
+      },
+      {
+        call: () => { s.viewed = new Set(["sci_steps","variables","ctrl_group"]); R(); },
+        cap: "生物與非生物的差別在「生命現象」:代謝、生長、感應與運動、生殖。四項全部符合才是生物。",
+        dur: 3200,
+      },
+      {
+        call: () => { s.viewed = new Set(["sci_steps","variables","ctrl_group","life_traits"]); R(); },
+        cap: "岩石、煤炭、牙刷是非生物,因為它們沒有代謝和生殖。木棉、樹蛙、人類都是生物。注意:鐘乳石會變長但不能代謝,仍是非生物。",
+        dur: 3400,
+      },
+      {
+        call: () => { s.viewed = new Set(["sci_steps","variables","ctrl_group","life_traits","bio_vs_nonbio"]); R(); },
+        cap: "假說是合理且可驗證的解釋,還未被確認。實驗結果可以支持或否定假說。否定假說同樣有價值,科學不允許捏造數據。",
+        dur: 3400,
+      },
+      {
+        call: () => {
+          s.viewed = new Set(lv._CARDS.map(c => c.key));
+          R();
+        },
+        cap: "六張概念卡都認識了!點進入小測驗,看看你掌握了多少。",
+        dur: 2400,
+      },
+    ];
+  },
+
+  controls(el) {
+    const s = this.state, lv = this;
+    const allViewed = () => lv._CARDS.every(c => s.viewed.has(c.key));
+
+    const render = () => {
+      /* ── 卡片查閱 ── */
+      if (s.phase === "cards") {
+        const cards = lv._CARDS.map(c => {
+          const seen = s.viewed.has(c.key);
+          return `
+            <div class="s7a05-card${seen ? " seen" : ""}" data-key="${c.key}"
+              style="border:2px solid ${seen ? c.color : "#55648f"};border-radius:8px;
+                padding:8px 12px;margin:4px 0;cursor:pointer;
+                background:${seen ? `${c.color}18` : "var(--panel2)"};
+                transition:border-color .2s">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:1.3rem">${c.icon}</span>
+                <b style="color:${seen ? c.color : "var(--ink)"}">${c.title}</b>
+                ${seen ? `<span style="font-size:.75rem;color:${c.color}">✓ 已查閱</span>` : `<span style="font-size:.75rem;color:#9aa5c4">點擊查看</span>`}
+              </div>
+              ${seen ? `
+              <div style="margin-top:6px;font-size:.82rem;color:var(--ink);white-space:pre-line">${c.body}</div>
+              <div style="margin-top:4px;font-size:.77rem;color:#9aa5c4">${c.note}</div>` : ""}
+            </div>`;
+        }).join("");
+        el.innerHTML = `
+          <div style="margin-bottom:6px;font-size:.85rem;color:#9aa5c4">點選每張卡片查閱說明，全部查閱後解鎖小測驗</div>
+          ${cards}
+          ${allViewed() ? `<button class="primary" id="s7a05-to-quiz" style="margin-top:8px;width:100%">進入小測驗(5 題) →</button>` : ""}
+        `;
+        el.querySelectorAll(".s7a05-card").forEach(card => {
+          card.onclick = () => {
+            s.viewed.add(card.dataset.key);
+            if (allViewed()) markGoal("S7A_05-a");
+            render();
+          };
+        });
+        const toQuiz = el.querySelector("#s7a05-to-quiz");
+        if (toQuiz) toQuiz.onclick = () => {
+          s.phase = "quiz"; s.qi = 0; s.answers = []; s.quizDone = false;
+          render();
+        };
+        return;
+      }
+
+      /* ── 小測驗 ── */
+      if (s.phase === "quiz") {
+        if (s.quizDone) {
+          const ok = s.answers.filter(a => a.correct).length;
+          const total = lv._QUIZ.length;
+          const pass = ok / total >= 0.8;
+          const rows = lv._QUIZ.map((q, i) => {
+            const a = s.answers[i] || {};
+            const ic = a.correct ? "✓" : "✗";
+            const col = a.correct ? "#4ade80" : "#ff5c7a";
+            return `<div style="display:flex;gap:6px;font-size:.8rem;margin:3px 0;align-items:flex-start">
+              <span style="color:${col};min-width:18px">${ic}</span>
+              <span>${i+1}. ${q.q}<br><span style="color:#9aa5c4">你答:${a.ans||"(未答)"}　正解:${q.ans}　${q.why}</span></span>
+            </div>`;
+          }).join("");
+          el.innerHTML = `
+            <div class="quiz-q" style="margin-bottom:6px">${pass ? "🎉 通關!" : "再接再厲!"} 得分 <b>${ok}/${total}</b> (${Math.round(ok/total*100)}%)</div>
+            <div style="background:var(--panel2);border-radius:8px;padding:8px;margin-bottom:10px;max-height:220px;overflow-y:auto">${rows}</div>
+            <div class="row">
+              <button class="primary" id="s7a05-retry">重做測驗</button>
+              <button id="s7a05-back-cards">回到卡片</button>
+            </div>
+          `;
+          if (pass) markGoal("S7A_05-b");
+          el.querySelector("#s7a05-retry").onclick = () => { s.qi = 0; s.answers = []; s.quizDone = false; render(); };
+          el.querySelector("#s7a05-back-cards").onclick = () => { s.phase = "cards"; render(); };
+          return;
+        }
+        /* 作答中 */
+        const item = lv._QUIZ[s.qi];
+        const answered = s.answers[s.qi] !== undefined;
+        const userAns = answered ? s.answers[s.qi].ans : null;
+        const matchAns5 = (u, c) => (u||"").trim().toUpperCase().charAt(0) === (c||"").trim().toUpperCase().charAt(0);
+        const optBtns = item.opts.map(opt => {
+          const letter = opt.trim().charAt(0).toUpperCase();
+          const selected = userAns && userAns.toUpperCase().charAt(0) === letter;
+          let bc = "#55648f";
+          if (answered && selected) bc = s.answers[s.qi].correct ? "#4ade80" : "#ff5c7a";
+          else if (answered && matchAns5(item.ans, opt)) bc = "#4ade80";
+          return `<button class="sci-opt" data-opt="${opt}"
+            style="width:100%;text-align:left;margin:3px 0;padding:7px 10px;
+              background:var(--panel2);border:1.5px solid ${bc};
+              border-radius:6px;cursor:${answered?"default":"pointer"};
+              font-size:.88rem;font-family:inherit;color:var(--ink);
+              ${answered?"pointer-events:none;":""}">${opt}</button>`;
+        }).join("");
+        el.innerHTML = `
+          <div class="quiz-q"><b>小測驗 ${s.qi+1}/${lv._QUIZ.length}</b>　${item.q}</div>
+          <div style="margin-top:8px">${optBtns}</div>
+          <div style="margin-top:6px;min-height:24px">
+            ${answered ? (s.answers[s.qi].correct ? `<span style="color:#4ade80">✓ 正確!</span>` : `<span style="color:#ff5c7a">✗ 正解: ${item.ans}</span>`) + `　${item.why}` : ""}
+          </div>
+          ${answered ? `<div class="row"><button class="primary" id="s7a05-next">${s.qi+1 < lv._QUIZ.length ? "下一題" : "看結果"}</button></div>` : ""}
+        `;
+        if (!answered) {
+          el.querySelectorAll(".sci-opt").forEach(btn => {
+            btn.onclick = () => {
+              const correct = matchAns5(btn.dataset.opt, item.ans);
+              s.answers[s.qi] = { ans: btn.dataset.opt, correct };
+              render();
+            };
+          });
+        } else {
+          el.querySelector("#s7a05-next").onclick = () => {
+            s.qi++;
+            if (s.qi >= lv._QUIZ.length) s.quizDone = true;
+            render();
+          };
+        }
+      }
+    };
+    this._renderCtl = render;
+    render();
+  },
+
+  draw() {
+    const s = this.state;
+    const W = canvas.width, H = canvas.height;
+    g.fillStyle = TH.bg; g.fillRect(0, 0, W, H);
+
+    const cards = this._CARDS;
+    const N = cards.length;
+    const cols = 3, rows = 2;
+    const cw = 120, ch = 70;
+    const gapX = 20, gapY = 18;
+    const startX = (W - cols * cw - (cols - 1) * gapX) / 2;
+    const startY = H * 0.18;
+
+    cards.forEach((c, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = startX + col * (cw + gapX);
+      const y = startY + row * (ch + gapY);
+      const seen = s.viewed.has(c.key);
+      g.fillStyle = seen ? `${c.color}28` : "rgba(40,50,80,.5)";
+      g.strokeStyle = seen ? c.color : "#39456e";
+      g.lineWidth = seen ? 2 : 1;
+      g.beginPath();
+      g.roundRect(x, y, cw, ch, 8);
+      g.fill(); g.stroke();
+      pText(x + cw/2, y + 22, c.icon, TH.text, 20, "center");
+      pText(x + cw/2, y + 48, c.title.replace("的", "\n"), seen ? c.color : TH.dim, 10, "center", true);
+    });
+
+    if (s.phase === "quiz") {
+      const ok = s.answers.filter(a => a.correct).length;
+      pText(CX, H * 0.82, s.quizDone ? (ok / this._QUIZ.length >= 0.8 ? "🏆" : "💪") : "📝", TH.text, 48, "center");
+      pText(CX, H * 0.92, s.quizDone ? `${ok}/${this._QUIZ.length}` : `第 ${s.qi+1} 題`, TH.dim, 16, "center");
+    }
+
+    const viewedN = s.viewed.size;
+    if (viewedN === N) markGoal("S7A_05-a");
+    readout.innerHTML = s.phase === "quiz"
+      ? (s.quizDone ? `得分 ${s.answers.filter(a=>a.correct).length}/${this._QUIZ.length}` : `小測驗 第 ${s.qi+1} 題`)
+      : `已查閱 <b>${viewedN}/${N}</b> 張卡片`;
+  },
+};
+
+/* ================================================================
+   S7A_05_QUESTIONS — 段考題庫(科學方法 + 生命特性)
+   知識點來源:
+     翰林 B1L1 Q26解析:甲=問題,乙=假說,丙=實驗,丁=觀察
+     翰林 B1L1 Q19解析:操作/控制/應變變因定義
+     翰林 B1L1 Q38解析:操作=操作變因;應變=應變變因
+     翰林 B1L1 Q7解析:實驗組vs對照組
+     康軒 B1L1 Q30解析:生物具代謝、生長、感應及生殖現象
+     翰林 B1L1 Q14解析:蝴蝶生命現象
+     翰林 B1L1 Q8解析:岩石/煤炭/牙刷=非生物;木棉/樹蛙/人類=生物
+     翰林 B1L1 Q23解析:「可以分解養分」符合代謝特點
+     翰林 B1L1 Q32解析:假說的定義
+     翰林 B1L1 Q37解析:缺少對照組+樣本數少=實驗缺陷
+   ================================================================ */
+const S7A_05_QUESTIONS = [
+  {
+    tid: "s7a_05_q1",
+    q: "探究未知生物現象時，科學方法的步驟順序為何?",
+    opts: [
+      "A. 提出問題 → 觀察 → 假說 → 設計實驗 → 結論",
+      "B. 觀察 → 提出問題 → 提出假說 → 設計實驗 → 結論",
+      "C. 假說 → 觀察 → 提出問題 → 設計實驗 → 結論",
+      "D. 觀察 → 假說 → 提出問題 → 設計實驗 → 結論",
+    ],
+    ans: "B",
+    why: "科學方法標準順序：觀察（發現現象）→ 提出問題 → 提出假說（可驗證的解釋）→ 設計實驗 → 分析結果 → 形成結論。（翰林 B1L1 Q49解析；Q26解析丁=觀察、甲=提出問題、乙=假說、丙=設計實驗）",
+  },
+  {
+    tid: "s7a_05_q2",
+    q: "「低溫下吐司較不易發霉」——這句話是科學方法中的哪一步驟?",
+    opts: ["A. 形成結論", "B. 觀察現象", "C. 提出假說", "D. 設計實驗"],
+    ans: "C",
+    why: "「低溫下吐司較不易發霉」是針對觀察現象提出的合理且可驗證的解釋，屬於提出假說。（翰林 B1L1 Q32解析）",
+  },
+  {
+    tid: "s7a_05_q3",
+    q: "大雄用綠豆進行四組實驗：甲（有光、泡水、30℃）、乙（無光、泡水、30℃）、丙（有光、不泡水、30℃）、丁（無光、不泡水、20℃）。比較甲、丙兩組，操作變因是什麼?",
+    opts: ["A. 溫度", "B. 照光與否", "C. 泡水與否", "D. 發芽率"],
+    ans: "C",
+    why: "甲和丙兩組只有「泡水與否」不同，其餘條件相同；操作變因就是唯一改變的因素——泡水與否。（翰林 B1L1 Q19解析：比較甲丙，操作變因為泡水與否）",
+  },
+  {
+    tid: "s7a_05_q4",
+    q: "下列哪一項最適合用來判斷找到的物質「是否為生物」?",
+    opts: ["A. 能吸收水分", "B. 摸起來有溫度", "C. 可以分解養分", "D. 會移動位置"],
+    ans: "C",
+    why: "「可以分解養分」符合生物的代謝特點；其餘（吸水、有溫度、移動）都可能僅是物理現象（如石頭可吸水、金屬有溫度、水流動）。（康軒 B1L1 Q30解析；翰林 B1L1 Q23解析）",
+  },
+  {
+    tid: "s7a_05_q5",
+    q: "蝴蝶飛舞採花蜜、能繁殖後代、身體會生長、體內有代謝作用。下列哪一項「不是」蝴蝶的生命現象?",
+    opts: ["A. 感應與運動（飛向花蜜）", "B. 生殖（繁殖後代）", "C. 生長（身體長大）", "D. 行光合作用製造有機物"],
+    ans: "D",
+    why: "光合作用需要葉綠體，是植物才有的能力；蝴蝶是動物，沒有葉綠體，無法行光合作用。代謝、感應、生長、生殖都是蝴蝶具備的生命現象。（翰林 B1L1 Q14解析）",
+  },
+  {
+    tid: "s7a_05_q6",
+    q: "下列各項中，哪些屬於「非生物」?（甲）木棉 （乙）岩石 （丙）莫氏樹蛙 （丁）煤炭 （戊）野牡丹",
+    opts: ["A. 甲丙戊", "B. 乙丁", "C. 丙丁戊", "D. 甲乙丙"],
+    ans: "B",
+    why: "岩石（乙）、煤炭（丁）沒有代謝、生長、感應、生殖能力，屬非生物；木棉（甲）、莫氏樹蛙（丙）、野牡丹（戊）都是生物。（翰林 B1L1 Q8解析）",
+  },
+  {
+    tid: "s7a_05_q7",
+    q: "在實驗設計中，「實驗組和對照組保持相同」的因素稱為?",
+    opts: ["A. 操作變因", "B. 應變變因", "C. 控制變因", "D. 干擾變因"],
+    ans: "C",
+    why: "控制變因是實驗組與對照組「保持相同」的所有條件，用來排除其他因素干擾，確保操作變因才是結果的原因。（翰林 B1L1 Q19解析說明；Q38解析：控制變因=實驗組和對照組相同的因素）",
+  },
+  {
+    tid: "s7a_05_q8",
+    q: "小明觀察到蜈蚣在陰暗潮濕處較多，他想知道「蜈蚣是否偏好潮濕環境」。他設計了兩組實驗：甲組（潮濕環境放蜈蚣）、乙組（乾燥環境放蜈蚣），觀察蜈蚣停留的位置。在此實驗中，「環境乾濕程度」屬於哪種變因?",
+    opts: ["A. 應變變因", "B. 控制變因", "C. 操作變因", "D. 無關變因"],
+    ans: "C",
+    why: "「環境的乾濕程度」是實驗中唯一改變的條件，用來驗證假說，屬於操作變因；「蜈蚣停留位置」才是應變變因（觀測結果）。（翰林 B1L1 Q19解析定義；Q7解析操作變因概念）",
+  },
+  {
+    tid: "s7a_05_q9",
+    q: "丸尾服用某藥廠新藥半年後長高 5 公分，這個結果無法證明藥物有效，最主要原因是?",
+    opts: [
+      "A. 服用時間太短",
+      "B. 缺少對照組做比較，且服用人數太少",
+      "C. 沒有測量藥物的化學成分",
+      "D. 沒有同時服用其他藥物",
+    ],
+    ans: "B",
+    why: "沒有對照組（未服藥的比較組）就無法排除「自然發育」導致長高的可能；單人實驗（樣本數太少）也無法排除個體差異。（翰林 B1L1 Q37解析）",
+  },
+  {
+    tid: "s7a_05_q10",
+    q: "下列關於「生命現象」的敘述，何者正確?",
+    opts: [
+      "A. 火焰能移動且會消耗氧氣，所以火焰是生物",
+      "B. 鐘乳石每年長高 2 公分，所以屬於「生長」生命現象",
+      "C. 生物必須具備代謝、生長、感應與運動、生殖四項特性，缺一不可",
+      "D. 只要能移動就符合感應與運動的生命現象",
+    ],
+    ans: "C",
+    why: "生物的判斷需要四種生命現象「全部符合」：代謝、生長、感應與運動、生殖。火焰不能生殖；鐘乳石的「長高」不是生物生長（無代謝、無生殖）；能移動的非生物（如水流、機器）不算感應。（康軒 B1L1 Q30解析；翰林 B1L1 Q8、Q23解析）",
+  },
+];
+
+const S7A_05_DRILL = makeStaticSciDrill(
+  "S7A_05D",
+  "科學方法與生命特性段考練習",
+  "段考練習|S7A-5D:科學方法+生命特性段考題庫",
+  `<p>本關模擬七上自然段考——<b>10 題</b>，涵蓋科學方法步驟、三種變因、實驗設計原則、生命特性四項、生物與非生物判斷等知識點。</p><p>點選正確選項，答完後可看詳解與成績；答對率 ≥75% 解鎖通關。</p>`,
+  "完成段考練習且答對率 ≥75%（科學方法與生命特性）",
+  S7A_05_QUESTIONS
+);
+
+/* ================================================================
    SCIENCE7A_REGISTRY — 供 main.js subject-loader 使用
    key = level id, value = 完整關卡物件(含 draw/demo/controls)
    ================================================================ */
@@ -2098,6 +2547,8 @@ const SCIENCE7A_REGISTRY = {
   S7A_03D: S7A_03_DRILL,
   S7A_04,
   S7A_04D: S7A_04_DRILL,
+  S7A_05,
+  S7A_05D: S7A_05_DRILL,
   S7A_QZ,
 };
 
@@ -2105,5 +2556,5 @@ const SCIENCE7A_REGISTRY = {
 window.__SUBJECT_SCIENCE7A__ = {
   subjectKey: "s7a",
   subjectName: "七上自然",
-  levels: [S7A_01, S7A_01_DRILL, S7A_02, S7A_02_DRILL, S7A_03, S7A_03_DRILL, S7A_04, S7A_04_DRILL, S7A_QZ],
+  levels: [S7A_01, S7A_01_DRILL, S7A_02, S7A_02_DRILL, S7A_03, S7A_03_DRILL, S7A_04, S7A_04_DRILL, S7A_05, S7A_05_DRILL, S7A_QZ],
 };
