@@ -1,5 +1,9 @@
 # 國中數感實驗室 Junior Math Lab
 
+**Live: https://junior-math-lab.vercel.app**
+
+![關卡畫面:負數在數線上走路](docs/screenshot.png)
+
 108 課綱七年級互動數學練習站。12 個關卡(七上 / 七下兩冊),用拖動、點選直接感受數學直覺。
 
 純前端、零依賴(Canvas 2D + vanilla JS),開 `index.html` 即用;進度存 localStorage。
